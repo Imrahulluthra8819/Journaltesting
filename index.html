@@ -4,22 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Journal - Professional Trading Tracker</title>
-<link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <!-- Add this entire style block -->
 </head>
 <body>
     <div id="authScreen" class="auth-screen">
         <div class="auth-container">
             <div class="auth-header">
                 <h1>
-  <img src="/favicon.png" alt="Logo" style="width: 50px; height: 50px; vertical-align: middle;">
-  TraderLog
-</h1>
+                    <img src="/favicon.png" alt="Logo" style="width: 50px; height: 50px; vertical-align: middle;">
+                    TraderLog
+                </h1>
                 <p>Professional Trading Tracker & Analytics</p>
             </div>
             <div class="auth-tabs">
@@ -78,16 +77,18 @@
             <div class="nav-container">
                 <div class="nav-brand">
                     <div class="nav-brand">
-   <div style="display: flex; align-items: center; gap: 6px;">
-  <img src="/favicon.png" alt="Logo" style="width: 50px; height: 50px;">
-  <h2 style="margin: 0;">TraderLog</h2>
-</div>
-</div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <img src="/favicon.png" alt="Logo" style="width: 50px; height: 50px;">
+                            <h2 style="margin: 0;">TraderLog</h2>
+                        </div>
+                    </div>
                 </div>
                 <ul class="nav-menu">
                     <li class="nav-item"><button class="nav-link active" data-section="dashboard">Dashboard</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="add-trade">Add Trade</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="history">Trade History</button></li>
+                    <!-- === NEW: News Button === -->
+                    <li class="nav-item"><button class="nav-link" data-section="news">News</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="analytics">Analytics</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="ai-suggestions">AI Suggestions</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="reports">Reports</button></li>
@@ -104,103 +105,97 @@
 
         <main class="main-content">
             <section id="dashboard" class="section active">
-    <div class="container">
-        <div class="section-header">
-    <h1>Trading Dashboard</h1>
-    <div class="header-actions">
-        <select id="currencySelector" class="form-control">
-            <option value="₹">INR (₹)</option>
-            <option value="$">USD ($)</option>
-        </select>
-        <button class="btn btn--primary" id="quickAddTrade">+ Add New Trade</button>
-    </div>
-</div>
-
-        <!-- The top stats grid remains the same -->
-        <div class="stats-grid">
-            <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-content"><h3 id="totalPL" class="stat-value">₹0</h3><p>Total P&L</p></div></div>
-            <div class="stat-card"><div class="stat-icon">📈</div><div class="stat-content"><h3 id="winRate" class="stat-value">0%</h3><p>Win Rate</p></div></div>
-            <div class="stat-card"><div class="stat-icon">🎯</div><div class="stat-content"><h3 id="totalTrades" class="stat-value">0</h3><p>Total Trades</p></div></div>
-            <div class="stat-card"><div class="stat-icon">⚖️</div><div class="stat-content"><h3 id="avgRR" class="stat-value">1:0</h3><p>Avg Risk:Reward</p></div></div>
-        </div>
-
-        <!-- This is the new main grid for the rest of the dashboard content -->
-      <!-- START: Paste this new grid code here -->
-<!-- START: Replace your old dashboard-main-grid with this one -->
-<!-- START: Replace your old dashboard-main-grid with this one -->
-<div class="dashboard-main-grid">
-    <!-- Left Column -->
-    <div class="dashboard-col-left">
-        <div id="plCard" class="card">
-            <div class="card__header">
-                <h3>Analytics Snapshot</h3>
-                <button class="view-all-link" data-section="analytics">View Details</button>
-            </div>
-            <div class="card__body">
-                <h4>P&L Curve</h4>
-                <div class="dashboard-chart-container">
-                    <canvas id="dashboardPlChart"></canvas>
-                </div>
-            </div>
-        </div>
-        <div class="recent-trades card">
-            <div class="card__header">
-                <h3>Recent Trades</h3>
-                <button class="view-all-link" data-section="history">View All</button>
-            </div>
-            <div class="card__body">
-                <div id="recentTradesList">
-                    <div class="loading">Loading recent trades...</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Right Column -->
-    <div class="dashboard-col-right">
-        <div class="confidence-tracker card">
-            <div class="card__body">
-                <h3>How are you feeling today?</h3>
-                <div class="confidence-controls">
-                    <div class="confidence-slider-container">
-                        <label for="dailyConfidence" class="form-label">Confidence (1-10)</label>
-                        <input type="range" id="dailyConfidence" class="range-input" min="1" max="10" value="5">
-                        <div class="range-value" id="confidenceValue">5</div>
+                <div class="container">
+                    <div class="section-header">
+                        <h1>Trading Dashboard</h1>
+                        <div class="header-actions">
+                            <select id="currencySelector" class="form-control">
+                                <option value="₹">INR (₹)</option>
+                                <option value="$">USD ($)</option>
+                            </select>
+                            <button class="btn btn--primary" id="quickAddTrade">+ Add New Trade</button>
+                        </div>
                     </div>
-                    <button class="btn btn--primary" id="saveConfidenceBtn">Submit</button>
+
+                    <div class="stats-grid">
+                        <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-content"><h3 id="totalPL" class="stat-value">₹0</h3><p>Total P&L</p></div></div>
+                        <div class="stat-card"><div class="stat-icon">📈</div><div class="stat-content"><h3 id="winRate" class="stat-value">0%</h3><p>Win Rate</p></div></div>
+                        <div class="stat-card"><div class="stat-icon">🎯</div><div class="stat-content"><h3 id="totalTrades" class="stat-value">0</h3><p>Total Trades</p></div></div>
+                        <div class="stat-card"><div class="stat-icon">⚖️</div><div class="stat-content"><h3 id="avgRR" class="stat-value">1:0</h3><p>Avg Risk:Reward</p></div></div>
+                    </div>
+
+                    <div class="dashboard-main-grid">
+                        <!-- Left Column -->
+                        <div class="dashboard-col-left">
+                            <div id="plCard" class="card">
+                                <div class="card__header">
+                                    <h3>Analytics Snapshot</h3>
+                                    <button class="view-all-link" data-section="analytics">View Details</button>
+                                </div>
+                                <div class="card__body">
+                                    <h4>P&L Curve</h4>
+                                    <div class="dashboard-chart-container">
+                                        <canvas id="dashboardPlChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="recent-trades card">
+                                <div class="card__header">
+                                    <h3>Recent Trades</h3>
+                                    <button class="view-all-link" data-section="history">View All</button>
+                                </div>
+                                <div class="card__body">
+                                    <div id="recentTradesList">
+                                        <div class="loading">Loading recent trades...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column -->
+                        <div class="dashboard-col-right">
+                            <div class="confidence-tracker card">
+                                <div class="card__body">
+                                    <h3>How are you feeling today?</h3>
+                                    <div class="confidence-controls">
+                                        <div class="confidence-slider-container">
+                                            <label for="dailyConfidence" class="form-label">Confidence (1-10)</label>
+                                            <input type="range" id="dailyConfidence" class="range-input" min="1" max="10" value="5">
+                                            <div class="range-value" id="confidenceValue">5</div>
+                                        </div>
+                                        <button class="btn btn--primary" id="saveConfidenceBtn">Submit</button>
+                                    </div>
+                                    <div id="confidenceMessage" class="confidence-message"></div>
+                                </div>
+                            </div>
+                            <div id="aiCard" class="card">
+                                <div class="card__header">
+                                    <h3>AI Suggestions</h3>
+                                    <button class="view-all-link" data-section="ai-suggestions">More Insights</button>
+                                </div>
+                                <div class="card__body">
+                                    <div id="dashboardAiFeedback" class="suggestion-content">
+                                        <div class="loading">Loading AI feedback...</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="dashboardCalendarCard" class="card">
+                                <div class="card__header">
+                                    <h3>P&L Calendar</h3>
+                                    <div class="calendar-nav">
+                                        <button class="btn btn--outline btn--sm" id="dashPrevMonth">‹</button>
+                                        <span id="dashCurrentMonth">Loading...</span>
+                                        <button class="btn btn--outline btn--sm" id="dashNextMonth">›</button>
+                                    </div>
+                                </div>
+                                <div class="card__body">
+                                    <div id="dashPlCalendar" class="pl-calendar"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div id="confidenceMessage" class="confidence-message"></div>
-            </div>
-        </div>
-        <div id="aiCard" class="card">
-            <div class="card__header">
-                <h3>AI Suggestions</h3>
-                <button class="view-all-link" data-section="ai-suggestions">More Insights</button>
-            </div>
-            <div class="card__body">
-                <div id="dashboardAiFeedback" class="suggestion-content">
-                    <div class="loading">Loading AI feedback...</div>
-                </div>
-            </div>
-        </div>
-        <div id="dashboardCalendarCard" class="card">
-            <div class="card__header">
-                <h3>P&L Calendar</h3>
-                <div class="calendar-nav">
-                    <button class="btn btn--outline btn--sm" id="dashPrevMonth">‹</button>
-                    <span id="dashCurrentMonth">Loading...</span>
-                    <button class="btn btn--outline btn--sm" id="dashNextMonth">›</button>
-                </div>
-            </div>
-            <div class="card__body">
-                <div id="dashPlCalendar" class="pl-calendar"></div>
-            </div>
-        </div>
-    </div>
-</div>
-<!-- END: Replacement block -->
-<!-- END: New grid code -->
-</section>
+            </section>
 
             <section id="add-trade" class="section">
                 <div class="container">
@@ -218,7 +213,36 @@
                                         <div class="form-group"><label class="form-label">Exit Price *</label><input type="number" name="exitPrice" class="form-control" required placeholder="Exit price" step="0.01" min="0"><div class="form-error" id="exitPrice-error"></div></div>
                                         <div class="form-group"><label class="form-label">Stop Loss</label><input type="number" name="stopLoss" class="form-control" placeholder="Stop loss price" step="0.01" min="0"></div>
                                         <div class="form-group"><label class="form-label">Target Price</label><input type="number" name="targetPrice" class="form-control" placeholder="Target price" step="0.01" min="0"></div>
-                                        <div class="form-group"><label class="form-label">Strategy</label><select name="strategy" class="form-control"><option value="">Select Strategy</option><option value="Breakout + VWAP">Breakout + VWAP</option><option value="Support Resistance">Support Resistance</option><option value="Trendline Bounce">Trendline Bounce</option><option value="Breakout Failure">Breakout Failure</option><option value="Scalping">Scalping</option><option value="Swing Trading">Swing Trading</option><option value="Other">Other</option></select></div>
+                                        
+                                        <div class="form-group">
+                                            <label class="form-label">Strategy</label>
+                                            <select name="strategy" id="addTradeStrategySelect" class="form-control">
+                                                <option value="">Select Strategy</option>
+                                                <option value="Breakout + VWAP">Breakout + VWAP</option>
+                                                <option value="Support Resistance">Support Resistance</option>
+                                                <option value="Trendline Bounce">Trendline Bounce</option>
+                                                <option value="Breakout Failure">Breakout Failure</option>
+                                                <option value="Scalping">Scalping</option>
+                                                <option value="Swing Trading">Swing Trading</option>
+                                                <option value="Momentum Trading">Momentum Trading</option>
+                                                <option value="Position Trading">Position Trading</option>
+                                                <option value="Mean Reversion">Mean Reversion</option>
+                                                <option value="Pairs Trading">Pairs Trading</option>
+                                                <option value="Arbitrage">Arbitrage</option>
+                                                <option value="News-Based Trading">News-Based Trading</option>
+                                                <option value="Algorithmic Trading">Algorithmic Trading</option>
+                                                <option value="Carry Trade">Carry Trade</option>
+                                                <option value="Elliott Wave Theory">Elliott Wave Theory</option>
+                                                <option value="Gann Theory">Gann Theory</option>
+                                                <option value="Other">Other</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="form-group hidden" id="otherStrategyGroup">
+                                            <label class="form-label">Please specify strategy</label>
+                                            <input type="text" name="other_strategy" class="form-control" placeholder="Enter your custom strategy">
+                                        </div>
+
                                         <div class="form-group"><label class="form-label">Exit Reason</label><select name="exitReason" class="form-control"><option value="">Select Exit Reason</option><option value="Target Hit">Target Hit</option><option value="SL Hit">Stop Loss Hit</option><option value="Manual Exit">Manual Exit</option><option value="Time Based Exit">Time Based Exit</option><option value="Breakeven">Breakeven</option><option value="Trailing Stop">Trailing Stop</option></select></div>
                                         <div class="form-group"><label class="form-label">Confidence Level (1-10)</label><input type="range" name="confidenceLevel" class="range-input" min="1" max="10" value="5"><div class="range-value">5</div></div>
                                         <div class="form-group"><label class="form-label">Entry Date *</label><input type="datetime-local" name="entryDate" class="form-control" required><div class="form-error" id="entryDate-error"></div></div>
@@ -356,6 +380,57 @@
 
             <section id="history" class="section"><div class="container"><div class="section-header"><h1>Trade History</h1><div class="filter-controls"><select id="symbolFilter" class="form-control" style="width: 150px;"><option value="">All Symbols</option></select><select id="strategyFilter" class="form-control" style="width: 150px;"><option value="">All Strategies</option></select></div></div><div id="historyContent"><div class="loading">Loading trade history...</div></div></div></section>
 
+            <!-- === NEW: News Section === -->
+            <section id="news" class="section">
+                <div class="container">
+                    <div class="section-header">
+                        <h1>Market News & Ticker</h1>
+                        <p>Stay updated with the latest market information</p>
+                    </div>
+
+                    <!-- TradingView Ticker Tape Widget BEGIN -->
+                    <div class="tradingview-widget-container" style="margin-bottom: 2rem;">
+                        <div class="tradingview-widget-container__widget"></div>
+                        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
+                        {
+                            "symbols": [
+                                { "proName": "FOREXCOM:SPXUSD", "title": "S&P 500" },
+                                { "proName": "FOREXCOM:NSXUSD", "title": "Nasdaq 100" },
+                                { "proName": "FX_IDC:EURUSD", "title": "EUR/USD" },
+                                { "proName": "BITSTAMP:BTCUSD", "title": "Bitcoin" },
+                                { "proName": "BITSTAMP:ETHUSD", "title": "Ethereum" },
+                                { "description": "NIFTY 50", "proName": "NSE:NIFTY" },
+                                { "description": "BANK NIFTY", "proName": "NSE:BANKNIFTY" }
+                            ],
+                            "showSymbolLogo": true,
+                            "colorTheme": "light",
+                            "isTransparent": false,
+                            "displayMode": "adaptive",
+                            "locale": "in"
+                        }
+                        </script>
+                    </div>
+                    <!-- TradingView Ticker Tape Widget END -->
+
+                    <!-- TradingView News Stream Widget BEGIN -->
+                    <div class="tradingview-widget-container">
+                        <div class="tradingview-widget-container__widget"></div>
+                        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js" async>
+                        {
+                            "feedMode": "all_symbols",
+                            "colorTheme": "light",
+                            "isTransparent": false,
+                            "displayMode": "regular",
+                            "width": "100%",
+                            "height": "600",
+                            "locale": "in"
+                        }
+                        </script>
+                    </div>
+                    <!-- TradingView News Stream Widget END -->
+                </div>
+            </section>
+
             <section id="analytics" class="section">
                 <div class="container">
                     <div class="section-header"><h1>Analytics & Performance</h1></div>
@@ -388,59 +463,33 @@
         <div id="tradeModal" class="modal hidden"><div class="modal-content"><div class="modal-header"><h2>Trade Details</h2><button class="modal-close" onclick="app.hideTradeModal()">&times;</button></div><div class="modal-body" id="tradeModalBody"></div><div class="modal-footer"><button class="btn btn--outline" onclick="app.hideTradeModal()">Close</button><button class="btn btn--primary" id="editTradeBtn">Edit Trade</button></div></div></div>
     </div>
     <!-- ======================================================= -->
-<!-- THIS IS THE CORRECT PLACE FOR THE CHAT WIDGET           -->
-<!-- ======================================================= -->
-<div id="aiChatWidget" class="chat-widget hidden">
-    <!-- Chat Window -->
-    <div id="aiChatWindow" class="chat-window hidden">
-        <div class="chat-header">
-            <h3>AI Journal Assistant</h3>
-            <button id="closeChatBtn" class="chat-close-btn">&times;</button>
-        </div>
-        <div id="aiChatMessages" class="chat-messages">
-            <div class="chat-message ai-message">
-                Hello! How can I help you reflect today?
+    <!-- CHAT WIDGET                                             -->
+    <!-- ======================================================= -->
+    <div id="aiChatWidget" class="chat-widget hidden">
+        <!-- Chat Window -->
+        <div id="aiChatWindow" class="chat-window hidden">
+            <div class="chat-header">
+                <h3>AI Journal Assistant</h3>
+                <button id="closeChatBtn" class="chat-close-btn">&times;</button>
+            </div>
+            <div id="aiChatMessages" class="chat-messages">
+                <div class="chat-message ai-message">
+                    Hello! How can I help you reflect today?
+                </div>
+            </div>
+            <div class="chat-input-container">
+                <input type="text" id="aiChatInput" placeholder="Ask about your trades...">
+                <button id="sendChatBtn" class="chat-send-btn">➤</button>
             </div>
         </div>
-        <div class="chat-input-container">
-            <input type="text" id="aiChatInput" placeholder="Ask about your trades...">
-            <button id="sendChatBtn" class="chat-send-btn">➤</button>
+        <!-- Chat Bubble -->
+        <div id="aiChatBubble" class="chat-bubble">
+            🧠
         </div>
     </div>
-    <!-- Chat Bubble -->
-    <div id="aiChatBubble" class="chat-bubble">
-        🧠
-    </div>
-</div>
     <div id="toastContainer" class="toast-container"></div>
-    <!-- Add this line -->
     <div id="calendarTooltip" class="calendar-tooltip"></div>
 
     <script src="app.js"></script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
