@@ -268,18 +268,13 @@ class TradingJournalApp {
  toggleTheme() {
   const html = document.documentElement;
   
-  // Check if the current theme is light
   const isLight = html.getAttribute('data-color-scheme') === 'light';
 
   if (isLight) {
-    // If it's light, remove the attribute to revert to the default (dark) theme.
     html.removeAttribute('data-color-scheme');
-    // Show the sun icon, indicating a click will switch to light mode.
     document.getElementById('themeToggle').textContent = '☀️';
   } else {
-    // If it's dark (default), set the attribute to 'light'.
     html.setAttribute('data-color-scheme', 'light');
-    // Show the moon icon, indicating a click will switch to dark mode.
     document.getElementById('themeToggle').textContent = '🌙';
   }
 }
@@ -289,14 +284,24 @@ class TradingJournalApp {
     document.querySelectorAll('.nav-link').forEach(btn => btn.classList.toggle('active', btn.dataset.section === id));
     document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
     document.getElementById(id).classList.add('active');
+    
+    // === UPDATED: Add 'news' to the switch statement ===
     switch (id) {
       case 'dashboard': this.renderDashboard(); break;
       case 'add-trade': this.renderAddTrade(); break;
       case 'history': this.renderHistory(); break;
+      case 'news': this.renderNews(); break; // New case
       case 'analytics': this.renderAnalytics(); break;
       case 'ai-suggestions': this.renderAISuggestions(); break;
       case 'reports': this.renderReports(); break;
     }
+  }
+  
+  // === NEW: Function to render the news section (currently does nothing, but is good for structure) ===
+  renderNews() {
+    // The TradingView widget loads itself, so we don't need to do much here.
+    // We could add logic later to dynamically change the widget's theme, for example.
+    console.log('[VIEW] Rendering News Section');
   }
 
   /* ------------------------------ HELPERS ------------------------------- */
@@ -424,7 +429,20 @@ class TradingJournalApp {
       this.updateCalculations();
       this.renderAddTrade();
       form.querySelectorAll('.range-value').forEach(el => el.textContent = '5');
+      document.getElementById('otherStrategyGroup').classList.add('hidden');
     });
+
+    const strategySelect = document.getElementById('addTradeStrategySelect');
+    const otherStrategyGroup = document.getElementById('otherStrategyGroup');
+    if (strategySelect && otherStrategyGroup) {
+        strategySelect.addEventListener('change', function() {
+            if (this.value === 'Other') {
+                otherStrategyGroup.classList.remove('hidden');
+            } else {
+                otherStrategyGroup.classList.add('hidden');
+            }
+        });
+    }
   }
 
   updateCalculations() {
@@ -465,6 +483,13 @@ class TradingJournalApp {
       this.showToast('You must be logged in to add a trade.', 'error');
       return;
     }
+
+    let finalStrategy = fd.get('strategy');
+    if (finalStrategy === 'Other') {
+        const customStrategy = fd.get('other_strategy').trim();
+        finalStrategy = customStrategy || 'Other (unspecified)';
+    }
+
     const trade = {
       symbol: fd.get('symbol').toUpperCase(),
       direction: fd.get('direction'),
@@ -473,7 +498,7 @@ class TradingJournalApp {
       exitPrice: parseFloat(fd.get('exitPrice')),
       stopLoss: parseFloat(fd.get('stopLoss')) || null,
       targetPrice: parseFloat(fd.get('targetPrice')) || null,
-      strategy: fd.get('strategy') || 'N/A',
+      strategy: finalStrategy,
       exitReason: fd.get('exitReason') || 'N/A',
       confidenceLevel: parseInt(fd.get('confidenceLevel')),
       entryDate: fd.get('entryDate'),
@@ -523,6 +548,7 @@ class TradingJournalApp {
       form.reset();
       this.updateCalculations();
       this.renderAddTrade();
+      document.getElementById('otherStrategyGroup').classList.add('hidden');
       document.dispatchEvent(new CustomEvent('data-changed'));
       this.showSection('dashboard');
     } catch (error) {
@@ -541,7 +567,9 @@ class TradingJournalApp {
     const symbols = [...new Set(this.trades.map(t => t.symbol))];
     const symbolFilter = document.getElementById('symbolFilter');
     symbolFilter.innerHTML = '<option value="">All Symbols</option>' + symbols.map(s => `<option value="${s}">${s}</option>`).join('');
+    
     const strategies = [...new Set(this.trades.map(t => t.strategy))];
+
     const strategyFilter = document.getElementById('strategyFilter');
     strategyFilter.innerHTML = '<option value="">All Strategies</option>' + strategies.map(s => `<option value="${s}">${s}</option>`).join('');
     const applyFilters = () => {
@@ -833,7 +861,6 @@ class TradingJournalApp {
 
   changeCalendarMonth(offset) {
     this.currentCalendarDate.setMonth(this.currentCalendarDate.getMonth() + offset);
-    // Re-render whichever calendar is visible
     if (document.getElementById('dashboard').classList.contains('active')) {
         this.buildDashboardCalendar();
     }
@@ -1100,7 +1127,7 @@ class TradingJournalApp {
 
     this.addChatMessage(question, 'user');
     chatInput.value = '';
-    this.showTypingIndicator(true); // <-- Typing animation starts here
+    this.showTypingIndicator(true);
 
     const trades = this.allTrades.slice(0, 20);
     const psychology = this.allConfidence.slice(0, 20);
@@ -1121,7 +1148,7 @@ class TradingJournalApp {
       console.error("Error fetching AI response:", error);
       this.addChatMessage("Sorry, I'm having trouble connecting. Please try again.", 'ai');
     } finally {
-      this.showTypingIndicator(false); // <-- Typing animation stops here
+      this.showTypingIndicator(false);
     }
   }
 
