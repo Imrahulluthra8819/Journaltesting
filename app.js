@@ -297,10 +297,9 @@ class TradingJournalApp {
     }
   }
   
-  // === NEW: Function to render the news section (currently does nothing, but is good for structure) ===
+  // === NEW: Function to render the news section ===
   renderNews() {
-    // The TradingView widget loads itself, so we don't need to do much here.
-    // We could add logic later to dynamically change the widget's theme, for example.
+    // The TradingView widget loads itself, so this function is mostly for structure.
     console.log('[VIEW] Rendering News Section');
   }
 
