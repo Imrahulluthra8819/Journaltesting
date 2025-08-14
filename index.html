@@ -106,27 +106,8 @@
             <section id="dashboard" class="section active">
                 <div class="container">
                     
-                    <div class="tradingview-widget-container" style="margin-bottom: 2rem;">
-                        <div class="tradingview-widget-container__widget"></div>
-                        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
-                        {
-                            "symbols": [
-                                { "proName": "FOREXCOM:SPXUSD", "title": "S&P 500" },
-                                { "proName": "FOREXCOM:NSXUSD", "title": "Nasdaq 100" },
-                                { "proName": "FX_IDC:EURUSD", "title": "EUR/USD" },
-                                { "proName": "BITSTAMP:BTCUSD", "title": "Bitcoin" },
-                                { "proName": "BITSTAMP:ETHUSD", "title": "Ethereum" },
-                                { "description": "NIFTY 50", "proName": "NSE:NIFTY" },
-                                { "description": "BANK NIFTY", "proName": "NSE:BANKNIFTY" }
-                            ],
-                            "showSymbolLogo": true,
-                            "colorTheme": "light",
-                            "isTransparent": false,
-                            "displayMode": "adaptive",
-                            "locale": "in"
-                        }
-                        </script>
-                    </div>
+                    <!-- Container for the Ticker Tape. The script is now loaded dynamically by app.js -->
+                    <div id="dashboard-ticker-tape-container" class="tradingview-widget-container" style="margin-bottom: 2rem;"></div>
 
                     <div class="section-header">
                         <h1>Trading Dashboard</h1>
@@ -409,22 +390,9 @@
                         <p>Stay updated with the latest market information</p>
                     </div>
 
-                    <!-- TradingView News Stream Widget BEGIN -->
-                    <div class="tradingview-widget-container" style="height: calc(100vh - 160px);">
-                        <div class="tradingview-widget-container__widget" style="height: 100%;"></div>
-                        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js" async>
-                        {
-                            "feedMode": "all_symbols",
-                            "colorTheme": "light",
-                            "isTransparent": false,
-                            "displayMode": "regular",
-                            "width": "100%",
-                            "height": "100%",
-                            "locale": "in"
-                        }
-                        </script>
-                    </div>
-                    <!-- TradingView News Stream Widget END -->
+                    <!-- Container for the News Widget. The script is now loaded dynamically by app.js -->
+                    <div id="news-widget-container" class="tradingview-widget-container" style="height: calc(100vh - 180px);"></div>
+
                 </div>
             </section>
 
@@ -489,4 +457,4 @@
 
     <script src="app.js"></script>
 </body>
-</ht
+</html>
