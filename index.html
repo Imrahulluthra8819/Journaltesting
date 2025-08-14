@@ -87,7 +87,6 @@
                     <li class="nav-item"><button class="nav-link active" data-section="dashboard">Dashboard</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="add-trade">Add Trade</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="history">Trade History</button></li>
-                    <!-- === NEW: News Button === -->
                     <li class="nav-item"><button class="nav-link" data-section="news">News</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="analytics">Analytics</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="ai-suggestions">AI Suggestions</button></li>
@@ -413,7 +412,7 @@
                     <!-- TradingView Ticker Tape Widget END -->
 
                     <!-- TradingView News Stream Widget BEGIN -->
-                    <div class="tradingview-widget-container">
+                    <div class="tradingview-widget-container" style="height: 600px;">
                         <div class="tradingview-widget-container__widget"></div>
                         <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-timeline.js" async>
                         {
@@ -422,7 +421,7 @@
                             "isTransparent": false,
                             "displayMode": "regular",
                             "width": "100%",
-                            "height": "600",
+                            "height": "100%",
                             "locale": "in"
                         }
                         </script>
