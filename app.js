@@ -265,19 +265,26 @@ class TradingJournalApp {
     }
   }
 
- toggleTheme() {
-  const html = document.documentElement;
-  
-  const isLight = html.getAttribute('data-color-scheme') === 'light';
-
-  if (isLight) {
-    html.removeAttribute('data-color-scheme');
-    document.getElementById('themeToggle').textContent = '☀️';
-  } else {
-    html.setAttribute('data-color-scheme', 'light');
-    document.getElementById('themeToggle').textContent = '🌙';
+  toggleTheme() {
+    const html = document.documentElement;
+    const isLight = html.getAttribute('data-color-scheme') === 'light';
+    
+    if (isLight) {
+      html.removeAttribute('data-color-scheme');
+      document.getElementById('themeToggle').textContent = '☀️';
+    } else {
+      html.setAttribute('data-color-scheme', 'light');
+      document.getElementById('themeToggle').textContent = '🌙';
+    }
+    
+    // ** BUG FIX: Reload widgets on theme change **
+    const activeSectionId = document.querySelector('.section.active')?.id;
+    if (activeSectionId === 'dashboard') {
+        this.loadTickerTapeWidget();
+    } else if (activeSectionId === 'news') {
+        this.loadNewsWidget();
+    }
   }
-}
 
   showSection(id) {
     if (!id) return;
@@ -285,22 +292,15 @@ class TradingJournalApp {
     document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
     document.getElementById(id).classList.add('active');
     
-    // === UPDATED: Add 'news' to the switch statement ===
     switch (id) {
       case 'dashboard': this.renderDashboard(); break;
       case 'add-trade': this.renderAddTrade(); break;
       case 'history': this.renderHistory(); break;
-      case 'news': this.renderNews(); break; // New case
+      case 'news': this.renderNews(); break;
       case 'analytics': this.renderAnalytics(); break;
       case 'ai-suggestions': this.renderAISuggestions(); break;
       case 'reports': this.renderReports(); break;
     }
-  }
-  
-  // === NEW: Function to render the news section ===
-  renderNews() {
-    // The TradingView widget loads itself, so this function is mostly for structure.
-    console.log('[VIEW] Rendering News Section');
   }
 
   /* ------------------------------ HELPERS ------------------------------- */
@@ -328,6 +328,55 @@ class TradingJournalApp {
     setTimeout(() => div.remove(), 4000);
   }
 
+  /* ---------------------- WIDGETS ----------------------------- */
+  
+  loadTradingViewWidget(containerId, config, src) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.innerHTML = ''; // Clear previous widget
+      const script = document.createElement('script');
+      script.type = 'text/javascript';
+      script.src = src;
+      script.async = true;
+      script.innerHTML = JSON.stringify(config);
+      container.appendChild(script);
+  }
+
+  loadTickerTapeWidget() {
+      const isLight = document.documentElement.getAttribute('data-color-scheme') === 'light';
+      const config = {
+          "symbols": [
+              { "proName": "FOREXCOM:SPXUSD", "title": "S&P 500" },
+              { "proName": "FOREXCOM:NSXUSD", "title": "Nasdaq 100" },
+              { "proName": "FX_IDC:EURUSD", "title": "EUR/USD" },
+              { "proName": "BITSTAMP:BTCUSD", "title": "Bitcoin" },
+              { "proName": "BITSTAMP:ETHUSD", "title": "Ethereum" },
+              { "description": "NIFTY 50", "proName": "NSE:NIFTY" },
+              { "description": "BANK NIFTY", "proName": "NSE:BANKNIFTY" }
+          ],
+          "showSymbolLogo": true,
+          "colorTheme": isLight ? "light" : "dark",
+          "isTransparent": false,
+          "displayMode": "adaptive",
+          "locale": "in"
+      };
+      this.loadTradingViewWidget('dashboard-ticker-tape-container', config, 'https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js');
+  }
+
+  loadNewsWidget() {
+      const isLight = document.documentElement.getAttribute('data-color-scheme') === 'light';
+      const config = {
+          "feedMode": "all_symbols",
+          "colorTheme": isLight ? "light" : "dark",
+          "isTransparent": false,
+          "displayMode": "regular",
+          "width": "100%",
+          "height": "100%",
+          "locale": "in"
+      };
+      this.loadTradingViewWidget('news-widget-container', config, 'https://s3.tradingview.com/external-embedding/embed-widget-timeline.js');
+  }
+
   /* ---------------------- DASHBOARD & STATS ----------------------------- */
   get trades() { return this.allTrades || []; }
   get confidenceEntries() { return this.allConfidence || []; }
@@ -349,6 +398,7 @@ class TradingJournalApp {
   }
 
   renderDashboard() {
+    this.loadTickerTapeWidget(); // ** BUG FIX: Load ticker on dashboard render **
     const s = this.calculateStats();
     const totalPLEl = document.getElementById('totalPL');
     totalPLEl.textContent = this.formatCurrency(s.totalPL);
@@ -373,6 +423,10 @@ class TradingJournalApp {
     this.drawDashboardPLChart();
     this.renderDashboardAIFeedback();
     this.buildDashboardCalendar();
+  }
+  
+  renderNews() {
+    this.loadNewsWidget(); // ** BUG FIX: Load news feed on news section render **
   }
 
   async saveDailyConfidence() {
