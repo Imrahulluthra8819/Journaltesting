@@ -228,6 +228,24 @@ class TradingJournalApp {
       if (activeSection) this.showSection(activeSection.id);
     });
 
+    // --- HAMBURGER MENU ---
+    const navToggle = document.getElementById('navToggle');
+    const navCollapse = document.getElementById('navCollapse');
+    if (navToggle && navCollapse) {
+        navToggle.addEventListener('click', () => {
+            navToggle.classList.toggle('active');
+            navCollapse.classList.toggle('active');
+        });
+
+        // Close menu when a link is clicked
+        navCollapse.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', () => {
+                navToggle.classList.remove('active');
+                navCollapse.classList.remove('active');
+            });
+        });
+    }
+
     // --- AI CHAT LISTENERS ---
     const chatBubble = document.getElementById('aiChatBubble');
     const chatWindow = document.getElementById('aiChatWindow');
@@ -867,36 +885,29 @@ class TradingJournalApp {
   
       const theme = document.documentElement.getAttribute('data-color-scheme') === 'light' ? 'light' : 'dark';
   
-      // Use the Advanced Real-Time Chart Widget for full functionality
-      const script = document.createElement('script');
-      script.type = 'text/javascript';
-      script.src = 'https://s3.tradingview.com/tv.js';
-      script.onload = () => {
-          new TradingView.widget({
-              "autosize": true,
-              "symbol": "NSE:NIFTY",
-              "interval": "D",
-              "timezone": "Asia/Kolkata",
-              "theme": theme,
-              "style": "1",
-              "locale": "in",
-              "enable_publishing": false,
-              "allow_symbol_change": true,
-              "details": true,
-              "hotlist": true,
-              "calendar": true,
-              "watchlist": [
-                "NSE:NIFTY",
-                "NSE:BANKNIFTY",
-                "NSE:RELIANCE",
-                "NSE:HDFCBANK",
-                "FX:EURUSD",
-                "BITSTAMP:BTCUSD"
-              ],
-              "container_id": "tradingview_chart_widget"
-          });
-      };
-      widgetContainer.appendChild(script);
+      new TradingView.widget({
+          "autosize": true,
+          "symbol": "NSE:NIFTY",
+          "interval": "D",
+          "timezone": "Asia/Kolkata",
+          "theme": theme,
+          "style": "1",
+          "locale": "in",
+          "enable_publishing": false,
+          "allow_symbol_change": true,
+          "details": true,
+          "hotlist": true,
+          "calendar": true,
+          "watchlist": [
+            "NSE:NIFTY",
+            "NSE:BANKNIFTY",
+            "NSE:RELIANCE",
+            "NSE:HDFCBANK",
+            "FX:EURUSD",
+            "BITSTAMP:BTCUSD"
+          ],
+          "container_id": "tradingview_chart_widget"
+      });
       this.chartsWidgetLoaded = true;
   }
 
@@ -1213,7 +1224,7 @@ class TradingJournalApp {
     }
     const totalPL = trades.reduce((sum, t) => sum + (t.netPL || 0), 0);
     const wins = trades.filter(t => t.netPL > 0).length;
-    const winRate = trades.length > 0 ? Math.round((wins / trades.length) * 100) : 0;
+    const winRate = trades.length > 0 ? Math.round((wins / this.trades.length) * 100) : 0;
     const bestTrade = Math.max(0, ...this.trades.map(t => t.netPL));
     const worstTrade = Math.min(0, ...this.trades.map(t => t.netPL));
     return { totalPL, winRate, totalTrades: trades.length, bestTrade, worstTrade };
