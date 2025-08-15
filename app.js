@@ -25,6 +25,8 @@ class TradingJournalApp {
     this.mainListenersAttached = false;
     this.currentCalendarDate = new Date();
     this.currencySymbol = '₹'; // Default to INR
+    this.tickerWidgetLoaded = false;
+    this.chartsWidgetLoaded = false;
 
     // --- BOOTSTRAP ---
     if (document.readyState === 'loading') {
@@ -265,57 +267,28 @@ class TradingJournalApp {
     }
   }
 
- toggleTheme() {
-  const html = document.documentElement;
-  const isLight = html.getAttribute('data-color-scheme') === 'light';
+  toggleTheme() {
+      const html = document.documentElement;
+      const isLight = html.getAttribute('data-color-scheme') === 'light';
 
-  if (isLight) {
-    html.removeAttribute('data-color-scheme');
-    document.getElementById('themeToggle').textContent = '☀️';
-  } else {
-    html.setAttribute('data-color-scheme', 'light');
-    document.getElementById('themeToggle').textContent = '🌙';
+      if (isLight) {
+          html.removeAttribute('data-color-scheme');
+          document.getElementById('themeToggle').textContent = '☀️';
+      } else {
+          html.setAttribute('data-color-scheme', 'light');
+          document.getElementById('themeToggle').textContent = '🌙';
+      }
+
+      // Force reload of widgets if they are visible
+      if (document.getElementById('dashboard').classList.contains('active')) {
+          this.tickerWidgetLoaded = false;
+          this.loadTickerWidget();
+      }
+      if (document.getElementById('charts').classList.contains('active')) {
+          this.chartsWidgetLoaded = false;
+          this.renderCharts();
+      }
   }
-  
-  // We need to reload the TradingView widgets to apply the theme
-  this.reloadTradingViewWidgets();
-}
-
-reloadTradingViewWidgets() {
-    // Reload the ticker tape on the dashboard
-    const tickerContainer = document.querySelector('#dashboard .tradingview-widget-container');
-    if (tickerContainer) {
-        const script = tickerContainer.querySelector('script');
-        if (script) {
-            const newScript = document.createElement('script');
-            newScript.src = "https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js";
-            newScript.async = true;
-            
-            const config = {
-                "symbols": [
-                    { "description": "NIFTY 50", "proName": "NSE:NIFTY" },
-                    { "description": "BANK NIFTY", "proName": "NSE:BANKNIFTY" },
-                    { "description": "EUR/USD", "proName": "FX:EURUSD" },
-                    { "description": "BTC/USD", "proName": "BITSTAMP:BTCUSD" },
-                    { "description": "ETH/USD", "proName": "BITSTAMP:ETHUSD" }
-                ],
-                "showSymbolLogo": true,
-                "colorTheme": document.documentElement.getAttribute('data-color-scheme') === 'light' ? 'light' : 'dark',
-                "isTransparent": true,
-                "displayMode": "adaptive",
-                "locale": "in"
-            };
-            newScript.innerHTML = JSON.stringify(config);
-            tickerContainer.innerHTML = ''; // Clear the old widget
-            tickerContainer.appendChild(newScript);
-        }
-    }
-
-    // Reload the advanced chart widget on the charts page if it's active
-    if (document.getElementById('charts').classList.contains('active')) {
-        this.renderCharts();
-    }
-}
 
 
   showSection(id) {
@@ -380,6 +353,7 @@ reloadTradingViewWidgets() {
   }
 
   renderDashboard() {
+    this.loadTickerWidget();
     const s = this.calculateStats();
     const totalPLEl = document.getElementById('totalPL');
     totalPLEl.textContent = this.formatCurrency(s.totalPL);
@@ -405,6 +379,40 @@ reloadTradingViewWidgets() {
     this.renderDashboardAIFeedback();
     this.buildDashboardCalendar();
   }
+  
+  loadTickerWidget() {
+      if (this.tickerWidgetLoaded && document.getElementById('tradingview-ticker-widget-script')) return;
+
+      const theme = document.documentElement.getAttribute('data-color-scheme') === 'light' ? 'light' : 'dark';
+      const script = document.createElement('script');
+      script.id = 'tradingview-ticker-widget-script';
+      script.type = 'text/javascript';
+      script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js';
+      script.async = true;
+      script.innerHTML = JSON.stringify({
+          "symbols": [
+              { "description": "SENSEX", "proName": "BSE:SENSEX" },
+              { "description": "NIFTY 50", "proName": "NSE:NIFTY" },
+              { "description": "S&P 500", "proName": "FOREXCOM:SPXUSD" },
+              { "description": "NASDAQ 100", "proName": "FOREXCOM:NSXUSD" },
+              { "description": "BTC/USD", "proName": "BITSTAMP:BTCUSD" },
+              { "description": "ETH/USD", "proName": "BITSTAMP:ETHUSD" }
+          ],
+          "showSymbolLogo": true,
+          "colorTheme": theme,
+          "isTransparent": true,
+          "displayMode": "adaptive",
+          "locale": "in"
+      });
+
+      const container = document.getElementById('newsTickerContainer');
+      if (container) {
+          container.innerHTML = ''; // Clear previous widget
+          container.appendChild(script);
+          this.tickerWidgetLoaded = true;
+      }
+  }
+
 
   async saveDailyConfidence() {
     const level = parseInt(document.getElementById('dailyConfidence').value, 10);
@@ -459,9 +467,14 @@ reloadTradingViewWidgets() {
       this.updateCalculations();
       this.renderAddTrade();
       form.querySelectorAll('.range-value').forEach(el => el.textContent = '5');
+      // ** START: CUSTOM STRATEGY CHANGE **
+      // Hide the 'Other' field on reset
       document.getElementById('otherStrategyGroup').classList.add('hidden');
+      // ** END: CUSTOM STRATEGY CHANGE **
     });
 
+    // ** START: CUSTOM STRATEGY CHANGE **
+    // Add event listener for the strategy dropdown to show/hide the custom input
     const strategySelect = document.getElementById('addTradeStrategySelect');
     const otherStrategyGroup = document.getElementById('otherStrategyGroup');
     if (strategySelect && otherStrategyGroup) {
@@ -473,6 +486,7 @@ reloadTradingViewWidgets() {
             }
         });
     }
+    // ** END: CUSTOM STRATEGY CHANGE **
   }
 
   updateCalculations() {
@@ -514,11 +528,14 @@ reloadTradingViewWidgets() {
       return;
     }
 
+    // ** START: CUSTOM STRATEGY CHANGE **
+    // Determine the final strategy value to be saved
     let finalStrategy = fd.get('strategy');
     if (finalStrategy === 'Other') {
         const customStrategy = fd.get('other_strategy').trim();
         finalStrategy = customStrategy || 'Other (unspecified)';
     }
+    // ** END: CUSTOM STRATEGY CHANGE **
 
     const trade = {
       symbol: fd.get('symbol').toUpperCase(),
@@ -528,7 +545,7 @@ reloadTradingViewWidgets() {
       exitPrice: parseFloat(fd.get('exitPrice')),
       stopLoss: parseFloat(fd.get('stopLoss')) || null,
       targetPrice: parseFloat(fd.get('targetPrice')) || null,
-      strategy: finalStrategy,
+      strategy: finalStrategy, // Use the final determined strategy
       exitReason: fd.get('exitReason') || 'N/A',
       confidenceLevel: parseInt(fd.get('confidenceLevel')),
       entryDate: fd.get('entryDate'),
@@ -578,7 +595,10 @@ reloadTradingViewWidgets() {
       form.reset();
       this.updateCalculations();
       this.renderAddTrade();
+       // ** START: CUSTOM STRATEGY CHANGE **
+      // Hide the 'Other' field after submission
       document.getElementById('otherStrategyGroup').classList.add('hidden');
+      // ** END: CUSTOM STRATEGY CHANGE **
       document.dispatchEvent(new CustomEvent('data-changed'));
       this.showSection('dashboard');
     } catch (error) {
@@ -598,10 +618,13 @@ reloadTradingViewWidgets() {
     const symbolFilter = document.getElementById('symbolFilter');
     symbolFilter.innerHTML = '<option value="">All Symbols</option>' + symbols.map(s => `<option value="${s}">${s}</option>`).join('');
     
+    // ** START: CUSTOM STRATEGY CHANGE **
+    // This code now dynamically includes any custom strategies you've saved. No changes were needed here.
     const strategies = [...new Set(this.trades.map(t => t.strategy))];
+    // ** END: CUSTOM STRATEGY CHANGE **
+
     const strategyFilter = document.getElementById('strategyFilter');
     strategyFilter.innerHTML = '<option value="">All Strategies</option>' + strategies.map(s => `<option value="${s}">${s}</option>`).join('');
-    
     const applyFilters = () => {
       const symVal = symbolFilter.value;
       const stratVal = strategyFilter.value;
@@ -609,7 +632,6 @@ reloadTradingViewWidgets() {
       renderTable(filtered);
     };
     symbolFilter.onchange = strategyFilter.onchange = applyFilters;
-    
     const renderTable = rows => {
       if (rows.length === 0) {
         container.innerHTML = '<div class="empty-state">No trades match filter.</div>';
@@ -833,6 +855,34 @@ reloadTradingViewWidgets() {
     makeTable('Day-of-Week Analysis', dowRows);
   }
 
+  /* ----------------------- CHARTS SECTION ----------------------------- */
+  renderCharts() {
+      if (this.chartsWidgetLoaded || typeof TradingView === 'undefined') return;
+
+      const widgetContainer = document.getElementById('tradingview_chart_widget');
+      if (!widgetContainer) return;
+
+      // Clear any previous content
+      widgetContainer.innerHTML = '';
+
+      const theme = document.documentElement.getAttribute('data-color-scheme') === 'light' ? 'light' : 'dark';
+
+      new TradingView.widget({
+          "autosize": true,
+          "symbol": "NSE:NIFTY",
+          "interval": "D",
+          "timezone": "Asia/Kolkata",
+          "theme": theme,
+          "style": "1",
+          "locale": "in",
+          "enable_publishing": false,
+          "allow_symbol_change": true,
+          "container_id": "tradingview_chart_widget"
+      });
+      this.chartsWidgetLoaded = true;
+  }
+
+
   /* ----------------------- AI SUGGESTIONS ----------------------------- */
   renderAISuggestions() {
     if (this.trades.length < 3) {
@@ -892,6 +942,7 @@ reloadTradingViewWidgets() {
 
   changeCalendarMonth(offset) {
     this.currentCalendarDate.setMonth(this.currentCalendarDate.getMonth() + offset);
+    // Re-render whichever calendar is visible
     if (document.getElementById('dashboard').classList.contains('active')) {
         this.buildDashboardCalendar();
     }
@@ -1144,7 +1195,7 @@ reloadTradingViewWidgets() {
     }
     const totalPL = trades.reduce((sum, t) => sum + (t.netPL || 0), 0);
     const wins = trades.filter(t => t.netPL > 0).length;
-    const winRate = trades.length > 0 ? Math.round((wins / this.trades.length) * 100) : 0;
+    const winRate = trades.length > 0 ? Math.round((wins / trades.length) * 100) : 0;
     const bestTrade = Math.max(0, ...this.trades.map(t => t.netPL));
     const worstTrade = Math.min(0, ...this.trades.map(t => t.netPL));
     return { totalPL, winRate, totalTrades: trades.length, bestTrade, worstTrade };
@@ -1158,7 +1209,7 @@ reloadTradingViewWidgets() {
 
     this.addChatMessage(question, 'user');
     chatInput.value = '';
-    this.showTypingIndicator(true);
+    this.showTypingIndicator(true); // <-- Typing animation starts here
 
     const trades = this.allTrades.slice(0, 20);
     const psychology = this.allConfidence.slice(0, 20);
@@ -1179,7 +1230,7 @@ reloadTradingViewWidgets() {
       console.error("Error fetching AI response:", error);
       this.addChatMessage("Sorry, I'm having trouble connecting. Please try again.", 'ai');
     } finally {
-      this.showTypingIndicator(false);
+      this.showTypingIndicator(false); // <-- Typing animation stops here
     }
   }
 
@@ -1274,43 +1325,6 @@ reloadTradingViewWidgets() {
   }
   // --- END: NEW DASHBOARD CALENDAR METHOD ---
   
-  /* ------------------------------ CHARTS --------------------------------- */
-  renderCharts() {
-      const container = document.getElementById('charts-content');
-      if (!container) return;
-  
-      // Clear previous widget to prevent duplicates
-      container.innerHTML = '';
-  
-      const widgetId = 'tradingview_chart_widget';
-      let widgetContainer = document.createElement('div');
-      widgetContainer.id = widgetId;
-      // Crucially, set a height for the container
-      widgetContainer.style.height = "100%"; 
-      container.appendChild(widgetContainer);
-  
-      // Use a small timeout to ensure the DOM is ready for the widget
-      setTimeout(() => {
-        if (window.TradingView) {
-            new window.TradingView.widget({
-                "width": "100%",
-                "height": "100%",
-                "symbol": "NSE:NIFTY",
-                "interval": "D",
-                "timezone": "Asia/Kolkata",
-                "theme": document.documentElement.getAttribute('data-color-scheme') === 'light' ? 'light' : 'dark',
-                "style": "1",
-                "locale": "in",
-                "toolbar_bg": "#f1f3f6",
-                "enable_publishing": false,
-                "allow_symbol_change": true,
-                "container_id": widgetId
-            });
-        }
-      }, 0);
-  }
-
-
   /* ------------------------ EXPORT ------------------------------------- */
   exportCSV() {
     if (this.trades.length===0) { this.showToast('No trades to export','warning'); return; }
