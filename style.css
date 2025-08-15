@@ -818,11 +818,15 @@ select.form-control {
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-lg);
   padding: var(--space-20);
+  overflow-y: auto; /* Make container scrollable if content overflows */
 }
 .chart-container h3 {
   margin: 0 0 var(--space-16) 0;
   text-align: center;
   color: var(--color-text);
+}
+#timeChart {
+    display: none; /* Hide the empty canvas used as a placeholder */
 }
 .time-table { margin-top: var(--space-24); }
 .time-table table.trade-table th { background: var(--color-bg-2); }
