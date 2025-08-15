@@ -85,11 +85,12 @@
                 </div>
                 <ul class="nav-menu">
                     <li class="nav-item"><button class="nav-link active" data-section="dashboard">Dashboard</button></li>
+                    <li class="nav-item"><button class="nav-link" data-section="add-trade">Add Trade</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="history">Trade History</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="analytics">Analytics</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="ai-suggestions">AI Suggestions</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="reports">Reports</button></li>
-                    <li class="nav-item"><button class="nav-link" data-section="Charts">Charts</button></li>
+                    <li class="nav-item"><button class="nav-link" data-section="charts">Charts</button></li>
                 </ul>
                 <div class="nav-user">
                     <div class="user-info">
@@ -446,41 +447,18 @@
                 </div>
             </section>
             
-            <!-- NEWS SECTION -->
-            <section id="news" class="section">
+            <!-- CHARTS SECTION -->
+            <section id="charts" class="section">
                 <div class="container">
                     <div class="section-header">
-                        <h1>Market News & Analysis</h1>
+                        <h1>Advanced Charts</h1>
                     </div>
-                    <div id="news-content" class="news-widget-container">
-                        <!-- TradingView Market Overview Widget -->
-                        <div class="tradingview-widget-container">
-                          <div id="tradingview_c285e"></div>
-                          <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-                          <script type="text/javascript">
-                          new TradingView.widget(
-                          {
-                          "width": "100%",
-                          "height": 610,
-                          "symbol": "NASDAQ:AAPL",
-                          "interval": "D",
-                          "timezone": "Etc/UTC",
-                          "theme": "dark",
-                          "style": "1",
-                          "locale": "in",
-                          "toolbar_bg": "#f1f3f6",
-                          "enable_publishing": false,
-                          "allow_symbol_change": true,
-                          "container_id": "tradingview_c285e"
-                        }
-                          );
-                          </script>
-                        </div>
-                        <!-- End TradingView Widget -->
+                    <div id="charts-content" class="charts-widget-container">
+                        <!-- TradingView Advanced Chart Widget will be loaded here by app.js -->
                     </div>
                 </div>
             </section>
-            <!-- END NEWS SECTION -->
+            <!-- END CHARTS SECTION -->
         </main>
         <div id="tradeModal" class="modal hidden"><div class="modal-content"><div class="modal-header"><h2>Trade Details</h2><button class="modal-close" onclick="app.hideTradeModal()">&times;</button></div><div class="modal-body" id="tradeModalBody"></div><div class="modal-footer"><button class="btn btn--outline" onclick="app.hideTradeModal()">Close</button><button class="btn btn--primary" id="editTradeBtn">Edit Trade</button></div></div></div>
     </div>
