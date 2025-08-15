@@ -105,13 +105,42 @@
         <main class="main-content">
             <section id="dashboard" class="section active">
                 <div class="container">
-                    <!-- NEWS TICKER -->
-                    <div class="news-ticker-container">
-                        <div class="news-ticker">
-                            <span class="news-item">Loading market news...</span>
-                        </div>
+                    <!-- TRADINGVIEW TICKER WIDGET -->
+                    <div class="tradingview-widget-container" style="margin-bottom: 24px;">
+                      <div class="tradingview-widget-container__widget"></div>
+                      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
+                      {
+                      "symbols": [
+                        {
+                          "description": "NIFTY 50",
+                          "proName": "NSE:NIFTY"
+                        },
+                        {
+                          "description": "BANK NIFTY",
+                          "proName": "NSE:BANKNIFTY"
+                        },
+                        {
+                          "description": "EUR/USD",
+                          "proName": "FX:EURUSD"
+                        },
+                        {
+                          "description": "BTC/USD",
+                          "proName": "BITSTAMP:BTCUSD"
+                        },
+                        {
+                          "description": "ETH/USD",
+                          "proName": "BITSTAMP:ETHUSD"
+                        }
+                      ],
+                      "showSymbolLogo": true,
+                      "colorTheme": "dark",
+                      "isTransparent": true,
+                      "displayMode": "adaptive",
+                      "locale": "in"
+                    }
+                      </script>
                     </div>
-                    <!-- END NEWS TICKER -->
+                    <!-- END TRADINGVIEW WIDGET -->
                     <div class="section-header">
                         <h1>Trading Dashboard</h1>
                         <div class="header-actions">
@@ -424,9 +453,31 @@
                     <div class="section-header">
                         <h1>Market News & Analysis</h1>
                     </div>
-                    <div id="news-content" class="news-grid">
-                        <!-- News articles will be loaded here by app.js -->
-                        <div class="loading">Loading news...</div>
+                    <div id="news-content" class="news-widget-container">
+                        <!-- TradingView Market Overview Widget -->
+                        <div class="tradingview-widget-container">
+                          <div id="tradingview_c285e"></div>
+                          <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+                          <script type="text/javascript">
+                          new TradingView.widget(
+                          {
+                          "width": "100%",
+                          "height": 610,
+                          "symbol": "NASDAQ:AAPL",
+                          "interval": "D",
+                          "timezone": "Etc/UTC",
+                          "theme": "dark",
+                          "style": "1",
+                          "locale": "in",
+                          "toolbar_bg": "#f1f3f6",
+                          "enable_publishing": false,
+                          "allow_symbol_change": true,
+                          "container_id": "tradingview_c285e"
+                        }
+                          );
+                          </script>
+                        </div>
+                        <!-- End TradingView Widget -->
                     </div>
                 </div>
             </section>
