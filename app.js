@@ -867,29 +867,36 @@ class TradingJournalApp {
   
       const theme = document.documentElement.getAttribute('data-color-scheme') === 'light' ? 'light' : 'dark';
   
-      new TradingView.widget({
-          "autosize": true,
-          "symbol": "NSE:NIFTY",
-          "interval": "D",
-          "timezone": "Asia/Kolkata",
-          "theme": theme,
-          "style": "1",
-          "locale": "in",
-          "enable_publishing": false,
-          "allow_symbol_change": true,
-          "details": true,
-          "hotlist": true,
-          "calendar": true,
-          "watchlist": [
-            "NSE:NIFTY",
-            "NSE:BANKNIFTY",
-            "NSE:RELIANCE",
-            "NSE:HDFCBANK",
-            "FX:EURUSD",
-            "BITSTAMP:BTCUSD"
-          ],
-          "container_id": "tradingview_chart_widget"
-      });
+      // Use the Advanced Real-Time Chart Widget for full functionality
+      const script = document.createElement('script');
+      script.type = 'text/javascript';
+      script.src = 'https://s3.tradingview.com/tv.js';
+      script.onload = () => {
+          new TradingView.widget({
+              "autosize": true,
+              "symbol": "NSE:NIFTY",
+              "interval": "D",
+              "timezone": "Asia/Kolkata",
+              "theme": theme,
+              "style": "1",
+              "locale": "in",
+              "enable_publishing": false,
+              "allow_symbol_change": true,
+              "details": true,
+              "hotlist": true,
+              "calendar": true,
+              "watchlist": [
+                "NSE:NIFTY",
+                "NSE:BANKNIFTY",
+                "NSE:RELIANCE",
+                "NSE:HDFCBANK",
+                "FX:EURUSD",
+                "BITSTAMP:BTCUSD"
+              ],
+              "container_id": "tradingview_chart_widget"
+          });
+      };
+      widgetContainer.appendChild(script);
       this.chartsWidgetLoaded = true;
   }
 
