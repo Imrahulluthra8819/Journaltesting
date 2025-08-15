@@ -10,6 +10,8 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <!-- TradingView Charting Library -->
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
 <body>
     <div id="authScreen" class="auth-screen">
@@ -90,6 +92,7 @@
                     <li class="nav-item"><button class="nav-link" data-section="analytics">Analytics</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="ai-suggestions">AI Suggestions</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="reports">Reports</button></li>
+                    <!-- New Charts Nav Link -->
                     <li class="nav-item"><button class="nav-link" data-section="charts">Charts</button></li>
                 </ul>
                 <div class="nav-user">
@@ -105,42 +108,6 @@
         <main class="main-content">
             <section id="dashboard" class="section active">
                 <div class="container">
-                    <!-- TRADINGVIEW TICKER WIDGET -->
-                    <div class="tradingview-widget-container" style="margin-bottom: 24px;">
-                      <div class="tradingview-widget-container__widget"></div>
-                      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
-                      {
-                      "symbols": [
-                        {
-                          "description": "NIFTY 50",
-                          "proName": "NSE:NIFTY"
-                        },
-                        {
-                          "description": "BANK NIFTY",
-                          "proName": "NSE:BANKNIFTY"
-                        },
-                        {
-                          "description": "EUR/USD",
-                          "proName": "FX:EURUSD"
-                        },
-                        {
-                          "description": "BTC/USD",
-                          "proName": "BITSTAMP:BTCUSD"
-                        },
-                        {
-                          "description": "ETH/USD",
-                          "proName": "BITSTAMP:ETHUSD"
-                        }
-                      ],
-                      "showSymbolLogo": true,
-                      "colorTheme": "dark",
-                      "isTransparent": true,
-                      "displayMode": "adaptive",
-                      "locale": "in"
-                    }
-                      </script>
-                    </div>
-                    <!-- END TRADINGVIEW WIDGET -->
                     <div class="section-header">
                         <h1>Trading Dashboard</h1>
                         <div class="header-actions">
@@ -151,6 +118,9 @@
                             <button class="btn btn--primary" id="quickAddTrade">+ Add New Trade</button>
                         </div>
                     </div>
+
+                    <!-- News Ticker Container -->
+                    <div id="newsTickerContainer" class="news-ticker-container"></div>
 
                     <div class="stats-grid">
                         <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-content"><h3 id="totalPL" class="stat-value">₹0</h3><p>Total P&L</p></div></div>
@@ -446,19 +416,19 @@
                     <div class="reports-grid"><div class="report-card card"><div class="card__body"><h3>Weekly Summary</h3><div id="weeklyReport"><div class="loading">Generating weekly report...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Monthly Analysis</h3><div id="monthlyReport"><div class="loading">Generating monthly report...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Strategy Performance</h3><div id="strategyReport"><div class="loading">Analyzing strategies...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Emotional Patterns</h3><div id="emotionalReport"><div class="loading">Analyzing emotional patterns...</div></div></div></div></div>
                 </div>
             </section>
-            
-            <!-- CHARTS SECTION -->
+
+            <!-- New Charts Section -->
             <section id="charts" class="section">
                 <div class="container">
                     <div class="section-header">
-                        <h1>Advanced Charts</h1>
+                        <h1>Live Market Charts</h1>
                     </div>
-                    <div id="charts-content" class="charts-widget-container">
-                        <!-- TradingView Advanced Chart Widget will be loaded here by app.js -->
+                    <div class="tradingview-widget-container" style="height: 75vh; width: 100%;">
+                      <div id="tradingview_chart_widget" style="height: 100%; width: 100%;"></div>
                     </div>
                 </div>
             </section>
-            <!-- END CHARTS SECTION -->
+
         </main>
         <div id="tradeModal" class="modal hidden"><div class="modal-content"><div class="modal-header"><h2>Trade Details</h2><button class="modal-close" onclick="app.hideTradeModal()">&times;</button></div><div class="modal-body" id="tradeModalBody"></div><div class="modal-footer"><button class="btn btn--outline" onclick="app.hideTradeModal()">Close</button><button class="btn btn--primary" id="editTradeBtn">Edit Trade</button></div></div></div>
     </div>
