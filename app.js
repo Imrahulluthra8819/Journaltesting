@@ -21,6 +21,7 @@ class TradingJournalApp {
     this.currentUser = null;
     this.allTrades = [];
     this.allConfidence = [];
+    this.allNotes = []; // <-- Add state for notes
     this.charts = {};
     this.mainListenersAttached = false;
     this.currentCalendarDate = new Date();
@@ -56,6 +57,7 @@ class TradingJournalApp {
         this.currentUser = null;
         this.allTrades = [];
         this.allConfidence = [];
+        this.allNotes = []; // <-- Clear notes on sign out
         Object.values(this.charts).forEach(chart => chart?.destroy());
         this.charts = {};
         this.showAuthScreen();
@@ -173,17 +175,21 @@ class TradingJournalApp {
     this.showToast('Loading your data...', 'info');
     const tradesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('trades').orderBy('entryDate', 'desc').get();
     const confidenceQuery = this.db.collection('users').doc(this.currentUser.uid).collection('confidence').orderBy('date', 'desc').get();
+    const notesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('notes').orderBy('date', 'desc').get(); // <-- Add notes query
     try {
-      const [tradesSnapshot, confidenceSnapshot] = await Promise.all([tradesQuery, confidenceQuery]);
+      const [tradesSnapshot, confidenceSnapshot, notesSnapshot] = await Promise.all([tradesQuery, confidenceQuery, notesQuery]); // <-- Fetch notes
       this.allTrades = tradesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       console.log(`[DATA] Loaded ${this.allTrades.length} trades.`);
       this.allConfidence = confidenceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       console.log(`[DATA] Loaded ${this.allConfidence.length} confidence entries.`);
+      this.allNotes = notesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); // <-- Populate notes
+      console.log(`[DATA] Loaded ${this.allNotes.length} notes.`);
     } catch (error) {
       console.error("[DATA] Error loading user data:", error);
       this.showToast(`Error loading data: ${error.message}`, 'error');
       this.allTrades = [];
       this.allConfidence = [];
+      this.allNotes = []; // <-- Reset notes on error
     }
   }
 
@@ -217,6 +223,7 @@ class TradingJournalApp {
     });
     document.getElementById('quickAddTrade').addEventListener('click', () => this.showSection('add-trade'));
     document.getElementById('saveConfidenceBtn').addEventListener('click', () => this.saveDailyConfidence());
+    document.getElementById('saveNoteBtn').addEventListener('click', () => this.saveNote()); // <-- Add listener for saving notes
     this.setupAddTradeForm();
     document.getElementById('exportData').addEventListener('click', () => this.exportCSV());
     document.getElementById('prevMonth').addEventListener('click', () => this.changeCalendarMonth(-1));
@@ -317,6 +324,7 @@ class TradingJournalApp {
     switch (id) {
       case 'dashboard': this.renderDashboard(); break;
       case 'add-trade': this.renderAddTrade(); break;
+      case 'notes': this.renderNotes(); break; // <-- Add case for notes
       case 'history': this.renderHistory(); break;
       case 'analytics': this.renderAnalytics(); break;
       case 'ai-suggestions': this.renderAISuggestions(); break;
@@ -453,6 +461,70 @@ class TradingJournalApp {
     } catch (error) {
       this.showToast(`Error saving confidence: ${error.message}`, 'error');
     }
+  }
+
+  /* ----------------------- NOTES SECTION ------------------------------ */
+  
+  async saveNote() {
+    const content = document.getElementById('dailyNoteContent').value.trim();
+    if (!content) {
+        this.showToast("Note content cannot be empty.", 'warning');
+        return;
+    }
+    const today = new Date().toISOString().split('T')[0];
+    const existingNote = this.allNotes.find(note => note.date === today);
+
+    try {
+        if (existingNote) {
+            // Update existing note for today
+            await this.db.collection('users').doc(this.currentUser.uid).collection('notes').doc(existingNote.id).update({
+                content: content,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            // Update local state
+            const noteIndex = this.allNotes.findIndex(n => n.id === existingNote.id);
+            this.allNotes[noteIndex].content = content;
+            this.showToast('Note for today updated!', 'success');
+        } else {
+            // Add new note for today
+            const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('notes').add({
+                date: today,
+                content: content,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            this.allNotes.unshift({ id: docRef.id, date: today, content: content });
+            this.showToast('Note saved successfully!', 'success');
+        }
+        document.dispatchEvent(new CustomEvent('data-changed'));
+    } catch (error) {
+        this.showToast(`Error saving note: ${error.message}`, 'error');
+        console.error("[DATA] Error saving note:", error);
+    }
+  }
+
+  renderNotes() {
+    const today = new Date().toISOString().split('T')[0];
+    const todayNote = this.allNotes.find(note => note.date === today);
+    const noteContentEl = document.getElementById('dailyNoteContent');
+    
+    noteContentEl.value = todayNote ? todayNote.content : '';
+
+    const historyContainer = document.getElementById('notesHistoryContainer');
+    if (this.allNotes.length === 0) {
+        historyContainer.innerHTML = '<div class="empty-state">You have not written any notes yet.</div>';
+        return;
+    }
+
+    historyContainer.innerHTML = this.allNotes.map(note => `
+        <div class="note-item">
+            <div class="note-header">
+                <h4 class="note-date">${new Date(note.date).toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h4>
+            </div>
+            <div class="note-content">
+                <p>${note.content.replace(/\n/g, '<br>')}</p>
+            </div>
+        </div>
+    `).join('');
   }
 
   /* ----------------------- ADD TRADE FORM ------------------------------ */
