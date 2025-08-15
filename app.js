@@ -858,15 +858,15 @@ class TradingJournalApp {
   /* ----------------------- CHARTS SECTION ----------------------------- */
   renderCharts() {
       if (this.chartsWidgetLoaded || typeof TradingView === 'undefined') return;
-
+  
       const widgetContainer = document.getElementById('tradingview_chart_widget');
       if (!widgetContainer) return;
-
+  
       // Clear any previous content
       widgetContainer.innerHTML = '';
-
+  
       const theme = document.documentElement.getAttribute('data-color-scheme') === 'light' ? 'light' : 'dark';
-
+  
       new TradingView.widget({
           "autosize": true,
           "symbol": "NSE:NIFTY",
@@ -877,6 +877,17 @@ class TradingJournalApp {
           "locale": "in",
           "enable_publishing": false,
           "allow_symbol_change": true,
+          "details": true,
+          "hotlist": true,
+          "calendar": true,
+          "watchlist": [
+            "NSE:NIFTY",
+            "NSE:BANKNIFTY",
+            "NSE:RELIANCE",
+            "NSE:HDFCBANK",
+            "FX:EURUSD",
+            "BITSTAMP:BTCUSD"
+          ],
           "container_id": "tradingview_chart_widget"
       });
       this.chartsWidgetLoaded = true;
