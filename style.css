@@ -828,7 +828,10 @@ select.form-control {
 #timeChart {
     display: none; /* Hide the empty canvas used as a placeholder */
 }
-.time-table { margin-top: var(--space-24); }
+.time-table { 
+    margin-top: var(--space-24); 
+    overflow-x: auto;
+}
 .time-table table.trade-table th { background: var(--color-bg-2); }
 .time-table h4 {
   margin-bottom: var(--space-12);
@@ -1233,44 +1236,7 @@ select.form-control {
     width: 100%;
     justify-content: flex-start;
   }
-  /* This converts the table to a "card" view on mobile */
-  .trade-table,
-  .trade-table thead,
-  .trade-table tbody,
-  .trade-table th,
-  .trade-table td,
-  .trade-table tr {
-    display: block;
-  }
-  .trade-table thead tr {
-    position: absolute;
-    top: -9999px;
-    left: -9999px;
-  }
-  .trade-table tr {
-    border: 1px solid var(--color-border);
-    margin-bottom: var(--space-8);
-    padding: var(--space-12);
-    border-radius: var(--radius-base);
-  }
-  .trade-table td {
-    border: none;
-    position: relative;
-    padding-left: 50%;
-    padding-bottom: var(--space-8);
-    text-align: right;
-  }
-  .trade-table td:before {
-    content: attr(data-label);
-    position: absolute;
-    left: var(--space-12);
-    width: 45%;
-    padding-right: var(--space-10);
-    white-space: nowrap;
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-secondary);
-    text-align: left;
-  }
+
   .pl-calendar { gap: var(--space-2); }
 }
 
