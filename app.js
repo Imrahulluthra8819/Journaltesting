@@ -265,41 +265,38 @@ class TradingJournalApp {
     }
   }
 
-  toggleTheme() {
-    const html = document.documentElement;
-    const isLight = html.getAttribute('data-color-scheme') === 'light';
-    
-    if (isLight) {
-      html.removeAttribute('data-color-scheme');
-      document.getElementById('themeToggle').textContent = '☀️';
-    } else {
-      html.setAttribute('data-color-scheme', 'light');
-      document.getElementById('themeToggle').textContent = '🌙';
-    }
-    
-    // ** BUG FIX: Reload widgets on theme change **
-    const activeSectionId = document.querySelector('.section.active')?.id;
-    if (activeSectionId === 'dashboard') {
-        this.loadTickerTapeWidget();
-    } else if (activeSectionId === 'news') {
-        this.loadNewsWidget();
-    }
+ toggleTheme() {
+  const html = document.documentElement;
+  
+  // Check if the current theme is light
+  const isLight = html.getAttribute('data-color-scheme') === 'light';
+
+  if (isLight) {
+    // If it's light, remove the attribute to revert to the default (dark) theme.
+    html.removeAttribute('data-color-scheme');
+    // Show the sun icon, indicating a click will switch to light mode.
+    document.getElementById('themeToggle').textContent = '☀️';
+  } else {
+    // If it's dark (default), set the attribute to 'light'.
+    html.setAttribute('data-color-scheme', 'light');
+    // Show the moon icon, indicating a click will switch to dark mode.
+    document.getElementById('themeToggle').textContent = '🌙';
   }
+}
 
   showSection(id) {
     if (!id) return;
     document.querySelectorAll('.nav-link').forEach(btn => btn.classList.toggle('active', btn.dataset.section === id));
     document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
     document.getElementById(id).classList.add('active');
-    
     switch (id) {
       case 'dashboard': this.renderDashboard(); break;
       case 'add-trade': this.renderAddTrade(); break;
       case 'history': this.renderHistory(); break;
-      case 'news': this.renderNews(); break;
       case 'analytics': this.renderAnalytics(); break;
       case 'ai-suggestions': this.renderAISuggestions(); break;
       case 'reports': this.renderReports(); break;
+      case 'news': this.renderNews(); break;
     }
   }
 
@@ -328,55 +325,6 @@ class TradingJournalApp {
     setTimeout(() => div.remove(), 4000);
   }
 
-  /* ---------------------- WIDGETS ----------------------------- */
-  
-  loadTradingViewWidget(containerId, config, src) {
-      const container = document.getElementById(containerId);
-      if (!container) return;
-      container.innerHTML = ''; // Clear previous widget
-      const script = document.createElement('script');
-      script.type = 'text/javascript';
-      script.src = src;
-      script.async = true;
-      script.innerHTML = JSON.stringify(config);
-      container.appendChild(script);
-  }
-
-  loadTickerTapeWidget() {
-      const isLight = document.documentElement.getAttribute('data-color-scheme') === 'light';
-      const config = {
-          "symbols": [
-              { "proName": "FOREXCOM:SPXUSD", "title": "S&P 500" },
-              { "proName": "FOREXCOM:NSXUSD", "title": "Nasdaq 100" },
-              { "proName": "FX_IDC:EURUSD", "title": "EUR/USD" },
-              { "proName": "BITSTAMP:BTCUSD", "title": "Bitcoin" },
-              { "proName": "BITSTAMP:ETHUSD", "title": "Ethereum" },
-              { "description": "NIFTY 50", "proName": "NSE:NIFTY" },
-              { "description": "BANK NIFTY", "proName": "NSE:BANKNIFTY" }
-          ],
-          "showSymbolLogo": true,
-          "colorTheme": isLight ? "light" : "dark",
-          "isTransparent": false,
-          "displayMode": "adaptive",
-          "locale": "in"
-      };
-      this.loadTradingViewWidget('dashboard-ticker-tape-container', config, 'https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js');
-  }
-
-  loadNewsWidget() {
-      const isLight = document.documentElement.getAttribute('data-color-scheme') === 'light';
-      const config = {
-          "feedMode": "all_symbols",
-          "colorTheme": isLight ? "light" : "dark",
-          "isTransparent": false,
-          "displayMode": "regular",
-          "width": "100%",
-          "height": "100%",
-          "locale": "in"
-      };
-      this.loadTradingViewWidget('news-widget-container', config, 'https://s3.tradingview.com/external-embedding/embed-widget-timeline.js');
-  }
-
   /* ---------------------- DASHBOARD & STATS ----------------------------- */
   get trades() { return this.allTrades || []; }
   get confidenceEntries() { return this.allConfidence || []; }
@@ -398,7 +346,6 @@ class TradingJournalApp {
   }
 
   renderDashboard() {
-    this.loadTickerTapeWidget(); // ** BUG FIX: Load ticker on dashboard render **
     const s = this.calculateStats();
     const totalPLEl = document.getElementById('totalPL');
     totalPLEl.textContent = this.formatCurrency(s.totalPL);
@@ -423,10 +370,7 @@ class TradingJournalApp {
     this.drawDashboardPLChart();
     this.renderDashboardAIFeedback();
     this.buildDashboardCalendar();
-  }
-  
-  renderNews() {
-    this.loadNewsWidget(); // ** BUG FIX: Load news feed on news section render **
+    this.renderNewsTicker();
   }
 
   async saveDailyConfidence() {
@@ -482,9 +426,14 @@ class TradingJournalApp {
       this.updateCalculations();
       this.renderAddTrade();
       form.querySelectorAll('.range-value').forEach(el => el.textContent = '5');
+      // ** START: CUSTOM STRATEGY CHANGE **
+      // Hide the 'Other' field on reset
       document.getElementById('otherStrategyGroup').classList.add('hidden');
+      // ** END: CUSTOM STRATEGY CHANGE **
     });
 
+    // ** START: CUSTOM STRATEGY CHANGE **
+    // Add event listener for the strategy dropdown to show/hide the custom input
     const strategySelect = document.getElementById('addTradeStrategySelect');
     const otherStrategyGroup = document.getElementById('otherStrategyGroup');
     if (strategySelect && otherStrategyGroup) {
@@ -496,6 +445,7 @@ class TradingJournalApp {
             }
         });
     }
+    // ** END: CUSTOM STRATEGY CHANGE **
   }
 
   updateCalculations() {
@@ -537,11 +487,14 @@ class TradingJournalApp {
       return;
     }
 
+    // ** START: CUSTOM STRATEGY CHANGE **
+    // Determine the final strategy value to be saved
     let finalStrategy = fd.get('strategy');
     if (finalStrategy === 'Other') {
         const customStrategy = fd.get('other_strategy').trim();
         finalStrategy = customStrategy || 'Other (unspecified)';
     }
+    // ** END: CUSTOM STRATEGY CHANGE **
 
     const trade = {
       symbol: fd.get('symbol').toUpperCase(),
@@ -551,7 +504,7 @@ class TradingJournalApp {
       exitPrice: parseFloat(fd.get('exitPrice')),
       stopLoss: parseFloat(fd.get('stopLoss')) || null,
       targetPrice: parseFloat(fd.get('targetPrice')) || null,
-      strategy: finalStrategy,
+      strategy: finalStrategy, // Use the final determined strategy
       exitReason: fd.get('exitReason') || 'N/A',
       confidenceLevel: parseInt(fd.get('confidenceLevel')),
       entryDate: fd.get('entryDate'),
@@ -601,7 +554,10 @@ class TradingJournalApp {
       form.reset();
       this.updateCalculations();
       this.renderAddTrade();
+       // ** START: CUSTOM STRATEGY CHANGE **
+      // Hide the 'Other' field after submission
       document.getElementById('otherStrategyGroup').classList.add('hidden');
+      // ** END: CUSTOM STRATEGY CHANGE **
       document.dispatchEvent(new CustomEvent('data-changed'));
       this.showSection('dashboard');
     } catch (error) {
@@ -621,7 +577,10 @@ class TradingJournalApp {
     const symbolFilter = document.getElementById('symbolFilter');
     symbolFilter.innerHTML = '<option value="">All Symbols</option>' + symbols.map(s => `<option value="${s}">${s}</option>`).join('');
     
+    // ** START: CUSTOM STRATEGY CHANGE **
+    // This code now dynamically includes any custom strategies you've saved. No changes were needed here.
     const strategies = [...new Set(this.trades.map(t => t.strategy))];
+    // ** END: CUSTOM STRATEGY CHANGE **
 
     const strategyFilter = document.getElementById('strategyFilter');
     strategyFilter.innerHTML = '<option value="">All Strategies</option>' + strategies.map(s => `<option value="${s}">${s}</option>`).join('');
@@ -914,6 +873,7 @@ class TradingJournalApp {
 
   changeCalendarMonth(offset) {
     this.currentCalendarDate.setMonth(this.currentCalendarDate.getMonth() + offset);
+    // Re-render whichever calendar is visible
     if (document.getElementById('dashboard').classList.contains('active')) {
         this.buildDashboardCalendar();
     }
@@ -1180,7 +1140,7 @@ class TradingJournalApp {
 
     this.addChatMessage(question, 'user');
     chatInput.value = '';
-    this.showTypingIndicator(true);
+    this.showTypingIndicator(true); // <-- Typing animation starts here
 
     const trades = this.allTrades.slice(0, 20);
     const psychology = this.allConfidence.slice(0, 20);
@@ -1201,7 +1161,7 @@ class TradingJournalApp {
       console.error("Error fetching AI response:", error);
       this.addChatMessage("Sorry, I'm having trouble connecting. Please try again.", 'ai');
     } finally {
-      this.showTypingIndicator(false);
+      this.showTypingIndicator(false); // <-- Typing animation stops here
     }
   }
 
@@ -1296,6 +1256,108 @@ class TradingJournalApp {
   }
   // --- END: NEW DASHBOARD CALENDAR METHOD ---
   
+  /* ------------------------------ NEWS --------------------------------- */
+
+  getMockNews() {
+      // In a real app, this would be an API call
+      return [
+          {
+              title: "NIFTY 50 Hits Record High as Banking Stocks Surge",
+              description: "The benchmark NIFTY 50 index crossed the 24,000 mark for the first time, driven by strong performance in the banking and financial services sectors.",
+              source: "Economic Times",
+              date: "2024-08-15T09:30:00Z",
+              url: "#",
+              imageUrl: "https://placehold.co/600x400/0f172a/cbd5e1?text=MarketRally"
+          },
+          {
+              title: "RBI Holds Repo Rate Steady at 6.5%, Cites Inflation Concerns",
+              description: "The Reserve Bank of India's Monetary Policy Committee (MPC) decided to keep the policy repo rate unchanged, prioritizing inflation control amidst global uncertainties.",
+              source: "Livemint",
+              date: "2024-08-15T08:45:00Z",
+              url: "#",
+              imageUrl: "https://placehold.co/600x400/1e293b/cbd5e1?text=RBI+Policy"
+          },
+          {
+              title: "IT Sector Faces Headwinds as Global Demand Slows",
+              description: "Major Indian IT companies are revising their growth forecasts downwards due to a slowdown in project spending from key markets in the US and Europe.",
+              source: "Reuters",
+              date: "2024-08-15T08:15:00Z",
+              url: "#",
+              imageUrl: "https://placehold.co/600x400/1d4ed8/f8fafc?text=IT+Sector"
+          },
+          {
+              title: "Reliance Industries Announces Major Investment in Green Energy",
+              description: "Reliance Industries has unveiled a ₹75,000 crore investment plan for its new energy business, focusing on solar and hydrogen power.",
+              source: "Bloomberg",
+              date: "2024-08-14T18:00:00Z",
+              url: "#",
+              imageUrl: "https://placehold.co/600x400/10b981/0f172a?text=Green+Energy"
+          },
+          {
+              title: "SEBI Introduces Stricter Norms for F&O Trading",
+              description: "The market regulator has announced new margin requirements and exposure limits for derivatives trading to curb excessive speculation.",
+              source: "Moneycontrol",
+              date: "2024-08-14T15:30:00Z",
+              url: "#",
+              imageUrl: "https://placehold.co/600x400/ef4444/f8fafc?text=SEBI+Norms"
+          },
+      ];
+  }
+
+  renderNewsTicker() {
+      const tickerContainer = document.querySelector('.news-ticker');
+      if (!tickerContainer) return;
+
+      const mockMarketData = [
+          { symbol: 'NIFTY 50', price: '24,012.50', change: '+150.75 (+0.63%)', positive: true },
+          { symbol: 'BANK NIFTY', price: '51,203.10', change: '+450.20 (+0.89%)', positive: true },
+          { symbol: 'RELIANCE', price: '2,850.00', change: '-12.50 (-0.44%)', positive: false },
+          { symbol: 'TCS', price: '3,800.50', change: '-25.10 (-0.66%)', positive: false },
+          { symbol: 'HDFC BANK', price: '1,680.75', change: '+22.30 (+1.35%)', positive: true },
+          { symbol: 'USD/INR', price: '83.55', change: '+0.05 (+0.06%)', positive: true },
+      ];
+      
+      // Duplicate data to ensure smooth continuous scroll
+      const tickerContent = [...mockMarketData, ...mockMarketData];
+
+      tickerContainer.innerHTML = tickerContent.map(item => `
+          <span class="news-item">
+              <span class="symbol">${item.symbol}</span>
+              ${item.price}
+              <span class="change ${item.positive ? 'positive' : 'negative'}">${item.change}</span>
+          </span>
+      `).join('');
+  }
+
+  renderNews() {
+      const newsContainer = document.getElementById('news-content');
+      if (!newsContainer) return;
+
+      const newsData = this.getMockNews();
+
+      if (newsData.length === 0) {
+          newsContainer.innerHTML = '<div class="empty-state">No news available at the moment.</div>';
+          return;
+      }
+
+      newsContainer.innerHTML = newsData.map(article => `
+          <div class="news-card">
+              <img src="${article.imageUrl}" alt="${article.title}" class="news-card__image" onerror="this.onerror=null;this.src='https://placehold.co/600x400/1e293b/64748b?text=Image+Error';">
+              <div class="news-card__content">
+                  <div class="news-card__meta">
+                      <span class="news-card__source">${article.source}</span> - 
+                      <span>${new Date(article.date).toLocaleDateString()}</span>
+                  </div>
+                  <h3 class="news-card__title">${article.title}</h3>
+                  <p class="news-card__description">${article.description}</p>
+                  <div class="news-card__footer">
+                      <a href="${article.url}" target="_blank" rel="noopener noreferrer" class="view-all-link">Read More &rarr;</a>
+                  </div>
+              </div>
+          </div>
+      `).join('');
+  }
+
   /* ------------------------ EXPORT ------------------------------------- */
   exportCSV() {
     if (this.trades.length===0) { this.showToast('No trades to export','warning'); return; }
