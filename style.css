@@ -1583,6 +1583,15 @@ select.form-control {
 .note-item {
     padding: var(--space-16);
     border-bottom: 1px solid var(--color-border);
+    transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+.note-item.clickable {
+    cursor: pointer;
+}
+
+.note-item.clickable:hover {
+    background-color: var(--color-secondary);
 }
 
 .note-item:last-child {
