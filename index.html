@@ -87,10 +87,10 @@
                     <li class="nav-item"><button class="nav-link active" data-section="dashboard">Dashboard</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="add-trade">Add Trade</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="history">Trade History</button></li>
-                    <li class="nav-item"><button class="nav-link" data-section="news">News</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="analytics">Analytics</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="ai-suggestions">AI Suggestions</button></li>
                     <li class="nav-item"><button class="nav-link" data-section="reports">Reports</button></li>
+                    <li class="nav-item"><button class="nav-link" data-section="news">News</button></li>
                 </ul>
                 <div class="nav-user">
                     <div class="user-info">
@@ -105,10 +105,13 @@
         <main class="main-content">
             <section id="dashboard" class="section active">
                 <div class="container">
-                    
-                    <!-- Container for the Ticker Tape. The script is now loaded dynamically by app.js -->
-                    <div id="dashboard-ticker-tape-container" style="margin-bottom: 2rem;"></div>
-
+                    <!-- NEWS TICKER -->
+                    <div class="news-ticker-container">
+                        <div class="news-ticker">
+                            <span class="news-item">Loading market news...</span>
+                        </div>
+                    </div>
+                    <!-- END NEWS TICKER -->
                     <div class="section-header">
                         <h1>Trading Dashboard</h1>
                         <div class="header-actions">
@@ -217,6 +220,7 @@
                                         <div class="form-group"><label class="form-label">Stop Loss</label><input type="number" name="stopLoss" class="form-control" placeholder="Stop loss price" step="0.01" min="0"></div>
                                         <div class="form-group"><label class="form-label">Target Price</label><input type="number" name="targetPrice" class="form-control" placeholder="Target price" step="0.01" min="0"></div>
                                         
+                                        <!-- === STRATEGY DROPDOWN (UPDATED) === -->
                                         <div class="form-group">
                                             <label class="form-label">Strategy</label>
                                             <select name="strategy" id="addTradeStrategySelect" class="form-control">
@@ -241,10 +245,12 @@
                                             </select>
                                         </div>
                                         
+                                        <!-- This is the new input field, hidden by default -->
                                         <div class="form-group hidden" id="otherStrategyGroup">
                                             <label class="form-label">Please specify strategy</label>
                                             <input type="text" name="other_strategy" class="form-control" placeholder="Enter your custom strategy">
                                         </div>
+                                        <!-- === END OF STRATEGY SECTION === -->
 
                                         <div class="form-group"><label class="form-label">Exit Reason</label><select name="exitReason" class="form-control"><option value="">Select Exit Reason</option><option value="Target Hit">Target Hit</option><option value="SL Hit">Stop Loss Hit</option><option value="Manual Exit">Manual Exit</option><option value="Time Based Exit">Time Based Exit</option><option value="Breakeven">Breakeven</option><option value="Trailing Stop">Trailing Stop</option></select></div>
                                         <div class="form-group"><label class="form-label">Confidence Level (1-10)</label><input type="range" name="confidenceLevel" class="range-input" min="1" max="10" value="5"><div class="range-value">5</div></div>
@@ -306,8 +312,8 @@
                                                 <div class="form-group full-width"><label class="form-label">Did You Wait for Setup?</label>
                                                     <div class="radio-group">
                                                         <label><input type="radio" name="waitedForSetup" value="Yes, completely"> Yes, completely</label><br>
-                                                        <label><input type="checkbox" name="waitedForSetup" value="Partially"> Partially</label><br>
-                                                        <label><input type="checkbox" name="waitedForSetup" value="No, entered early"> No, entered early</label>
+                                                        <label><input type="radio" name="waitedForSetup" value="Partially"> Partially</label><br>
+                                                        <label><input type="radio" name="waitedForSetup" value="No, entered early"> No, entered early</label>
                                                     </div>
                                                 </div>
                                                 <div class="form-group"><label class="form-label">Position Sizing Comfort (1-10)</label><input type="range" name="positionComfort" class="range-input" min="1" max="10" value="5"><div class="range-value">5</div></div>
@@ -383,19 +389,6 @@
 
             <section id="history" class="section"><div class="container"><div class="section-header"><h1>Trade History</h1><div class="filter-controls"><select id="symbolFilter" class="form-control" style="width: 150px;"><option value="">All Symbols</option></select><select id="strategyFilter" class="form-control" style="width: 150px;"><option value="">All Strategies</option></select></div></div><div id="historyContent"><div class="loading">Loading trade history...</div></div></div></section>
 
-            <section id="news" class="section">
-                <div class="container">
-                    <div class="section-header">
-                        <h1>Market News</h1>
-                        <p>Stay updated with the latest market information</p>
-                    </div>
-
-                    <!-- Container for the News Widget. The script is now loaded dynamically by app.js -->
-                    <div id="news-widget-container" class="tradingview-widget-container" style="height: calc(100vh - 180px);"></div>
-
-                </div>
-            </section>
-
             <section id="analytics" class="section">
                 <div class="container">
                     <div class="section-header"><h1>Analytics & Performance</h1></div>
@@ -424,6 +417,20 @@
                     <div class="reports-grid"><div class="report-card card"><div class="card__body"><h3>Weekly Summary</h3><div id="weeklyReport"><div class="loading">Generating weekly report...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Monthly Analysis</h3><div id="monthlyReport"><div class="loading">Generating monthly report...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Strategy Performance</h3><div id="strategyReport"><div class="loading">Analyzing strategies...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Emotional Patterns</h3><div id="emotionalReport"><div class="loading">Analyzing emotional patterns...</div></div></div></div></div>
                 </div>
             </section>
+            
+            <!-- NEWS SECTION -->
+            <section id="news" class="section">
+                <div class="container">
+                    <div class="section-header">
+                        <h1>Market News & Analysis</h1>
+                    </div>
+                    <div id="news-content" class="news-grid">
+                        <!-- News articles will be loaded here by app.js -->
+                        <div class="loading">Loading news...</div>
+                    </div>
+                </div>
+            </section>
+            <!-- END NEWS SECTION -->
         </main>
         <div id="tradeModal" class="modal hidden"><div class="modal-content"><div class="modal-header"><h2>Trade Details</h2><button class="modal-close" onclick="app.hideTradeModal()">&times;</button></div><div class="modal-body" id="tradeModalBody"></div><div class="modal-footer"><button class="btn btn--outline" onclick="app.hideTradeModal()">Close</button><button class="btn btn--primary" id="editTradeBtn">Edit Trade</button></div></div></div>
     </div>
