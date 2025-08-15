@@ -132,7 +132,7 @@
   --color-bg-4: rgba(var(--color-danger-val), 0.1);
   --color-bg-5: rgba(var(--color-accent-val), 0.1);
   --color-bg-6: rgba(249, 115, 22, 0.1);
-  --color-bg-7: rgba(236, 72, 153, 0.1);
+  --color-bg-7: rgba(236, 72, 153, 0.15);
   --color-bg-8: rgba(var(--color-secondary-val), 0.1);
 
   /* Shadows for light mode */
@@ -1115,33 +1115,94 @@ select.form-control {
     background: var(--color-border);
 }
 
+/* --- HAMBURGER MENU STYLES --- */
+.nav-toggle {
+    display: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 10px;
+    z-index: 1001;
+}
+.hamburger {
+    display: block;
+    position: relative;
+    width: 24px;
+    height: 2px;
+    background: var(--color-text);
+    transition: all 0.2s ease-in-out;
+}
+.hamburger::before,
+.hamburger::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: var(--color-text);
+    transition: all 0.2s ease-in-out;
+}
+.hamburger::before { top: -8px; }
+.hamburger::after { bottom: -8px; }
+
+.nav-toggle.active .hamburger { background: transparent; }
+.nav-toggle.active .hamburger::before { transform: rotate(45deg) translate(5px, 6px); }
+.nav-toggle.active .hamburger::after { transform: rotate(-45deg) translate(5px, -6px); }
+
 
 /* ==========================================================================
    MOBILE OPTIMIZATIONS
    ========================================================================== */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
+  .nav-toggle {
+      display: block;
+  }
   .nav-container {
-    flex-direction: column;
-    padding: var(--space-12);
-    height: auto;
+      flex-direction: row;
+      justify-content: space-between;
+      padding: var(--space-12) var(--space-16);
+  }
+  .nav-collapse {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      width: 100%;
+      background: var(--color-surface);
+      border-top: 1px solid var(--color-border);
+      flex-direction: column;
+      padding: var(--space-16);
+      box-shadow: var(--shadow-md);
+      z-index: 1000;
+  }
+  .nav-collapse.active {
+      display: flex;
   }
   .nav-menu {
-    margin-top: var(--space-12);
-    flex-wrap: wrap;
-    justify-content: center;
-    width: 100%;
-    border-top: 1px solid var(--color-border);
-    padding-top: var(--space-8);
+      flex-direction: column;
+      width: 100%;
+      align-items: flex-start;
+      margin-top: 0;
+      border-top: none;
+      padding-top: 0;
+      gap: 0;
   }
   .nav-link {
-    padding: var(--space-8) var(--space-12);
-    height: auto;
-    line-height: 1.5;
+      width: 100%;
+      text-align: left;
+      padding: var(--space-12) var(--space-16);
+      border-bottom: none;
+      border-radius: var(--radius-base);
+  }
+  .nav-link:hover {
+      background: var(--color-secondary);
   }
   .nav-user {
-    margin-top: var(--space-12);
-    width: 100%;
-    justify-content: space-between;
+      margin-top: var(--space-16);
+      padding-top: var(--space-16);
+      border-top: 1px solid var(--color-border);
+      width: 100%;
+      justify-content: space-between;
   }
   .stats-grid,
   .form-grid,
@@ -1525,3 +1586,21 @@ select.form-control {
 }
 .auth-header img { height: 30px; }
 .nav-brand img { height: 24px; }
+
+/* --- DESKTOP CHAT WIDGET SIZE INCREASE --- */
+@media (min-width: 1024px) {
+    .chat-window {
+        width: 420px;
+        height: 600px;
+    }
+    .nav-collapse {
+        display: flex !important;
+        position: static;
+        width: auto;
+        background: none;
+        border: none;
+        flex-direction: row;
+        padding: 0;
+        box-shadow: none;
+    }
+}
