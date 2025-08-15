@@ -91,7 +91,6 @@
                 <div class="nav-collapse" id="navCollapse">
                     <ul class="nav-menu">
                         <li class="nav-item"><button class="nav-link active" data-section="dashboard">Dashboard</button></li>
-                        <!-- "Add Trade" is replaced with "Notes" -->
                         <li class="nav-item"><button class="nav-link" data-section="notes">Notes</button></li>
                         <li class="nav-item"><button class="nav-link" data-section="history">Trade History</button></li>
                         <li class="nav-item"><button class="nav-link" data-section="analytics">Analytics</button></li>
@@ -468,6 +467,24 @@
 
         </main>
         <div id="tradeModal" class="modal hidden"><div class="modal-content"><div class="modal-header"><h2>Trade Details</h2><button class="modal-close" onclick="app.hideTradeModal()">&times;</button></div><div class="modal-body" id="tradeModalBody"></div><div class="modal-footer"><button class="btn btn--outline" onclick="app.hideTradeModal()">Close</button><button class="btn btn--primary" id="editTradeBtn">Edit Trade</button></div></div></div>
+        
+        <!-- Note Modal -->
+        <div id="noteModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Note Details</h2>
+                    <button class="modal-close" onclick="app.hideNoteModal()">&times;</button>
+                </div>
+                <div class="modal-body" id="noteModalBody">
+                    <!-- Note content will be injected here by JavaScript -->
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn--outline" onclick="app.hideNoteModal()">Close</button>
+                    <button class="btn btn--primary" id="saveNoteChangesBtn">Save Changes</button>
+                </div>
+            </div>
+        </div>
+
     </div>
     <!-- ======================================================= -->
     <!-- CHAT WIDGET                                             -->
