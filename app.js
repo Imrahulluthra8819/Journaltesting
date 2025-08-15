@@ -311,9 +311,9 @@ reloadTradingViewWidgets() {
         }
     }
 
-    // Reload the market overview widget on the news page if it's active
-    if (document.getElementById('news').classList.contains('active')) {
-        this.renderNews();
+    // Reload the advanced chart widget on the charts page if it's active
+    if (document.getElementById('charts').classList.contains('active')) {
+        this.renderCharts();
     }
 }
 
@@ -330,7 +330,7 @@ reloadTradingViewWidgets() {
       case 'analytics': this.renderAnalytics(); break;
       case 'ai-suggestions': this.renderAISuggestions(); break;
       case 'reports': this.renderReports(); break;
-      case 'news': this.renderNews(); break;
+      case 'charts': this.renderCharts(); break;
     }
   }
 
@@ -1144,7 +1144,7 @@ reloadTradingViewWidgets() {
     }
     const totalPL = trades.reduce((sum, t) => sum + (t.netPL || 0), 0);
     const wins = trades.filter(t => t.netPL > 0).length;
-    const winRate = trades.length > 0 ? Math.round((wins / trades.length) * 100) : 0;
+    const winRate = trades.length > 0 ? Math.round((wins / this.trades.length) * 100) : 0;
     const bestTrade = Math.max(0, ...this.trades.map(t => t.netPL));
     const worstTrade = Math.min(0, ...this.trades.map(t => t.netPL));
     return { totalPL, winRate, totalTrades: trades.length, bestTrade, worstTrade };
@@ -1274,15 +1274,40 @@ reloadTradingViewWidgets() {
   }
   // --- END: NEW DASHBOARD CALENDAR METHOD ---
   
-  /* ------------------------------ NEWS --------------------------------- */
-  renderNews() {
-      const container = document.getElementById('news-content');
+  /* ------------------------------ CHARTS --------------------------------- */
+  renderCharts() {
+      const container = document.getElementById('charts-content');
       if (!container) return;
-
-      // The widget is now directly in the HTML. This function is called when the
-      // news tab is clicked, ensuring the widget reloads if the theme has changed.
-      // The `reloadTradingViewWidgets` function will handle the actual re-rendering.
-      this.reloadTradingViewWidgets();
+  
+      // Clear previous widget to prevent duplicates
+      container.innerHTML = '';
+  
+      const widgetId = 'tradingview_chart_widget';
+      let widgetContainer = document.createElement('div');
+      widgetContainer.id = widgetId;
+      // Crucially, set a height for the container
+      widgetContainer.style.height = "100%"; 
+      container.appendChild(widgetContainer);
+  
+      // Use a small timeout to ensure the DOM is ready for the widget
+      setTimeout(() => {
+        if (window.TradingView) {
+            new window.TradingView.widget({
+                "width": "100%",
+                "height": "100%",
+                "symbol": "NSE:NIFTY",
+                "interval": "D",
+                "timezone": "Asia/Kolkata",
+                "theme": document.documentElement.getAttribute('data-color-scheme') === 'light' ? 'light' : 'dark',
+                "style": "1",
+                "locale": "in",
+                "toolbar_bg": "#f1f3f6",
+                "enable_publishing": false,
+                "allow_symbol_change": true,
+                "container_id": widgetId
+            });
+        }
+      }, 0);
   }
 
 
