@@ -1,1314 +1,460 @@
-// Trading Journal Application - Integrated with Firebase
-class TradingJournalApp {
-  constructor() {
-    // --- FIREBASE SETUP ---
-    const firebaseConfig = {
-      apiKey: "AIzaSyCcbykkhvTw671DG1EaAj7Tw9neQcXJjS0",
-      authDomain: "trad-77851.firebaseapp.com",
-      projectId: "trad-77851",
-      storageBucket: "trad-77851.appspot.com",
-      messagingSenderId: "1099300399869",
-      appId: "1:1099300399869:web:d201028b9168d24feb2c94",
-      measurementId: "G-9TV0H4BWN6"
-    };
-
-    // Initialize Firebase
-    firebase.initializeApp(firebaseConfig);
-    this.auth = firebase.auth();
-    this.db = firebase.firestore();
-
-    // --- APP STATE ---
-    this.currentUser = null;
-    this.allTrades = [];
-    this.allConfidence = [];
-    this.charts = {};
-    this.mainListenersAttached = false;
-    this.currentCalendarDate = new Date();
-    this.currencySymbol = '₹'; // Default to INR
-
-    // --- BOOTSTRAP ---
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => this.bootstrap());
-    } else {
-      this.bootstrap();
-    }
-  }
-
-  bootstrap() {
-    this.setupAuthListeners();
-    this.handleAuthStateChange();
-  }
-
-  /* ------------------------------- AUTH ---------------------------------- */
-
-  handleAuthStateChange() {
-    this.auth.onAuthStateChanged(async (user) => {
-      if (user) {
-        console.log('[AUTH] User is signed in:', user.uid);
-        this.currentUser = user;
-        await this.loadUserData();
-        this.showMainApp();
-        document.getElementById('aiChatWidget')?.classList.remove('hidden');
-      } else {
-        console.log('[AUTH] User is signed out.');
-        this.currentUser = null;
-        this.allTrades = [];
-        this.allConfidence = [];
-        Object.values(this.charts).forEach(chart => chart?.destroy());
-        this.charts = {};
-        this.showAuthScreen();
-        document.getElementById('aiChatWidget')?.classList.add('hidden');
-      }
-    });
-  }
-
-  setupAuthListeners() {
-    document.querySelectorAll('.auth-tab').forEach(tab => {
-      tab.addEventListener('click', () => this.switchAuthTab(tab.dataset.tab));
-    });
-
-    const loginForm = document.getElementById('loginFormElement');
-    loginForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      this.clearAuthErrors();
-      const submitButton = loginForm.querySelector('button[type="submit"]');
-      const originalButtonText = submitButton.textContent;
-      try {
-        submitButton.disabled = true;
-        submitButton.textContent = 'Logging in...';
-        const email = loginForm.email.value;
-        const password = loginForm.password.value;
-        await this.auth.signInWithEmailAndPassword(email, password);
-      } catch (error) {
-        this.showAuthError('login-password-error', error.message);
-      } finally {
-        submitButton.disabled = false;
-        submitButton.textContent = originalButtonText;
-      }
-    });
-
-    const signupForm = document.getElementById('signupFormElement');
-    signupForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      this.clearAuthErrors();
-      const submitButton = signupForm.querySelector('button[type="submit"]');
-      const originalButtonText = submitButton.textContent;
-      try {
-        submitButton.disabled = true;
-        submitButton.textContent = 'Signing up...';
-        const email = signupForm.email.value;
-        const password = signupForm.password.value;
-        const confirm = signupForm.confirmPassword.value;
-        if (password !== confirm) {
-          this.showAuthError('signup-confirmPassword-error', 'Passwords do not match');
-          return;
-        }
-        await this.auth.createUserWithEmailAndPassword(email, password);
-        this.showToast('Signup successful! You can now log in.', 'success');
-        signupForm.reset();
-        this.switchAuthTab('login');
-      } catch (error) {
-        this.showAuthError('signup-email-error', error.message);
-      } finally {
-        submitButton.disabled = false;
-        submitButton.textContent = originalButtonText;
-      }
-    });
-
-    const googleSignInBtn = document.getElementById('googleSignInBtn');
-    if (googleSignInBtn) {
-      googleSignInBtn.addEventListener('click', () => this.signInWithGoogle());
-    }
-  }
-
-  async signInWithGoogle() {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    try {
-      this.clearAuthErrors();
-      await this.auth.signInWithPopup(provider);
-      this.showToast('Successfully signed in with Google!', 'success');
-    } catch (error) {
-      console.error('[AUTH] Google Sign-In Error:', error);
-      this.showAuthError('login-password-error', `Google Sign-In Failed: ${error.message}`);
-    }
-  }
-
-  async logout() {
-    try {
-      await this.auth.signOut();
-      this.showToast('Logged out successfully', 'info');
-    } catch (error) {
-      this.showToast(`Logout failed: ${error.message}`, 'error');
-    }
-  }
-
-  switchAuthTab(tab) {
-    document.querySelectorAll('.auth-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-    document.querySelectorAll('.auth-form').forEach(f => f.classList.toggle('active', f.id === tab + 'Form'));
-    this.clearAuthErrors();
-  }
-
-  showAuthError(id, msg) {
-    const el = document.getElementById(id);
-    if (el) {
-      el.textContent = msg;
-      el.classList.add('active');
-    }
-  }
-
-  clearAuthErrors() {
-    document.querySelectorAll('.form-error').forEach(e => {
-      e.textContent = '';
-      e.classList.remove('active');
-    });
-  }
-
-  /* ------------------------------ DATA --------------------------------- */
-
-  async loadUserData() {
-    if (!this.currentUser) return;
-    console.log('[DATA] Loading user data...');
-    this.showToast('Loading your data...', 'info');
-    const tradesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('trades').orderBy('entryDate', 'desc').get();
-    const confidenceQuery = this.db.collection('users').doc(this.currentUser.uid).collection('confidence').orderBy('date', 'desc').get();
-    try {
-      const [tradesSnapshot, confidenceSnapshot] = await Promise.all([tradesQuery, confidenceQuery]);
-      this.allTrades = tradesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      console.log(`[DATA] Loaded ${this.allTrades.length} trades.`);
-      this.allConfidence = confidenceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      console.log(`[DATA] Loaded ${this.allConfidence.length} confidence entries.`);
-    } catch (error) {
-      console.error("[DATA] Error loading user data:", error);
-      this.showToast(`Error loading data: ${error.message}`, 'error');
-      this.allTrades = [];
-      this.allConfidence = [];
-    }
-  }
-
-  /* ------------------------------ VIEW --------------------------------- */
-  showAuthScreen() {
-    document.getElementById('authScreen').style.display = 'flex';
-    document.getElementById('mainApp').classList.add('hidden');
-  }
-
-  showMainApp() {
-    document.getElementById('authScreen').style.display = 'none';
-    document.getElementById('mainApp').classList.remove('hidden');
-    if (!this.mainListenersAttached) {
-      this.attachMainListeners();
-      this.mainListenersAttached = true;
-    }
-    this.updateUserInfo();
-    this.showSection('dashboard');
-  }
-
-  attachMainListeners() {
-    // --- MAIN APP LISTENERS ---
-    document.querySelectorAll('.nav-link, .view-all-link').forEach(btn => {
-      btn.addEventListener('click', () => this.showSection(btn.dataset.section));
-    });
-    document.getElementById('logoutBtn').addEventListener('click', () => this.logout());
-    document.getElementById('themeToggle').addEventListener('click', () => this.toggleTheme());
-    document.getElementById('currencySelector').addEventListener('change', (e) => {
-        this.currencySymbol = e.target.value;
-        document.dispatchEvent(new CustomEvent('data-changed'));
-    });
-    document.getElementById('quickAddTrade').addEventListener('click', () => this.showSection('add-trade'));
-    document.getElementById('saveConfidenceBtn').addEventListener('click', () => this.saveDailyConfidence());
-    this.setupAddTradeForm();
-    document.getElementById('exportData').addEventListener('click', () => this.exportCSV());
-    document.getElementById('prevMonth').addEventListener('click', () => this.changeCalendarMonth(-1));
-    document.getElementById('nextMonth').addEventListener('click', () => this.changeCalendarMonth(1));
-    document.getElementById('dashPrevMonth').addEventListener('click', () => this.changeCalendarMonth(-1));
-    document.getElementById('dashNextMonth').addEventListener('click', () => this.changeCalendarMonth(1));
-    document.addEventListener('data-changed', () => {
-      const activeSection = document.querySelector('.section.active');
-      if (activeSection) this.showSection(activeSection.id);
-    });
-
-    // --- AI CHAT LISTENERS ---
-    const chatBubble = document.getElementById('aiChatBubble');
-    const chatWindow = document.getElementById('aiChatWindow');
-    const closeChatBtn = document.getElementById('closeChatBtn');
-    const chatInput = document.getElementById('aiChatInput');
-    const sendChatBtn = document.getElementById('sendChatBtn');
-
-    if (chatBubble) {
-      chatBubble.addEventListener('click', () => {
-        chatWindow.classList.toggle('hidden');
-      });
-    }
-    if (closeChatBtn) {
-      closeChatBtn.addEventListener('click', () => {
-        chatWindow.classList.add('hidden');
-      });
-    }
-    const sendMessageHandler = () => {
-      if (chatInput.value.trim()) {
-        this.handleSendMessage();
-      }
-    };
-    if (sendChatBtn) sendChatBtn.addEventListener('click', sendMessageHandler);
-    if (chatInput) {
-      chatInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          sendMessageHandler();
-        }
-      });
-    }
-  }
-
-  updateUserInfo() {
-    if (this.currentUser) {
-      document.getElementById('currentUserEmail').textContent = this.currentUser.email;
-    }
-  }
-
-  toggleTheme() {
-    const html = document.documentElement;
-    const isLight = html.getAttribute('data-color-scheme') === 'light';
-    
-    if (isLight) {
-      html.removeAttribute('data-color-scheme');
-      document.getElementById('themeToggle').textContent = '☀️';
-    } else {
-      html.setAttribute('data-color-scheme', 'light');
-      document.getElementById('themeToggle').textContent = '🌙';
-    }
-    
-    // ** BUG FIX: Reload widgets on theme change **
-    const activeSectionId = document.querySelector('.section.active')?.id;
-    if (activeSectionId === 'dashboard') {
-        this.loadTickerTapeWidget();
-    } else if (activeSectionId === 'news') {
-        this.loadNewsWidget();
-    }
-  }
-
-  showSection(id) {
-    if (!id) return;
-    document.querySelectorAll('.nav-link').forEach(btn => btn.classList.toggle('active', btn.dataset.section === id));
-    document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-    
-    switch (id) {
-      case 'dashboard': this.renderDashboard(); break;
-      case 'add-trade': this.renderAddTrade(); break;
-      case 'history': this.renderHistory(); break;
-      case 'news': this.renderNews(); break;
-      case 'analytics': this.renderAnalytics(); break;
-      case 'ai-suggestions': this.renderAISuggestions(); break;
-      case 'reports': this.renderReports(); break;
-    }
-  }
-
-  /* ------------------------------ HELPERS ------------------------------- */
-  formatCurrency(val) {
-    if (val === null || val === undefined) return `${this.currencySymbol}0.00`;
-    const sign = val < 0 ? '-' : '';
-    const locale = this.currencySymbol === '₹' ? 'en-IN' : 'en-US';
-    return sign + this.currencySymbol + Math.abs(val).toLocaleString(locale, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  }
-
-  formatDate(str) {
-    if (!str) return 'N/A';
-    return new Date(str).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: '2-digit' });
-  }
-
-  showToast(msg, type = 'info') {
-    const container = document.getElementById('toastContainer');
-    const div = document.createElement('div');
-    div.className = 'toast ' + type;
-    div.textContent = msg;
-    container.appendChild(div);
-    setTimeout(() => div.remove(), 4000);
-  }
-
-  /* ---------------------- WIDGETS ----------------------------- */
-  
-  loadTradingViewWidget(containerId, config, src) {
-      const container = document.getElementById(containerId);
-      if (!container) return;
-      container.innerHTML = ''; // Clear previous widget
-      const script = document.createElement('script');
-      script.type = 'text/javascript';
-      script.src = src;
-      script.async = true;
-      script.innerHTML = JSON.stringify(config);
-      container.appendChild(script);
-  }
-
-  loadTickerTapeWidget() {
-      const isLight = document.documentElement.getAttribute('data-color-scheme') === 'light';
-      const config = {
-          "symbols": [
-              { "proName": "FOREXCOM:SPXUSD", "title": "S&P 500" },
-              { "proName": "FOREXCOM:NSXUSD", "title": "Nasdaq 100" },
-              { "proName": "FX_IDC:EURUSD", "title": "EUR/USD" },
-              { "proName": "BITSTAMP:BTCUSD", "title": "Bitcoin" },
-              { "proName": "BITSTAMP:ETHUSD", "title": "Ethereum" },
-              { "description": "NIFTY 50", "proName": "NSE:NIFTY" },
-              { "description": "BANK NIFTY", "proName": "NSE:BANKNIFTY" }
-          ],
-          "showSymbolLogo": true,
-          "colorTheme": isLight ? "light" : "dark",
-          "isTransparent": false,
-          "displayMode": "adaptive",
-          "locale": "in"
-      };
-      this.loadTradingViewWidget('dashboard-ticker-tape-container', config, 'https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js');
-  }
-
-  loadNewsWidget() {
-      const isLight = document.documentElement.getAttribute('data-color-scheme') === 'light';
-      const config = {
-          "feedMode": "all_symbols",
-          "colorTheme": isLight ? "light" : "dark",
-          "isTransparent": false,
-          "displayMode": "regular",
-          "width": "100%",
-          "height": "100%",
-          "locale": "in"
-      };
-      this.loadTradingViewWidget('news-widget-container', config, 'https://s3.tradingview.com/external-embedding/embed-widget-timeline.js');
-  }
-
-  /* ---------------------- DASHBOARD & STATS ----------------------------- */
-  get trades() { return this.allTrades || []; }
-  get confidenceEntries() { return this.allConfidence || []; }
-
-  calculateStats() {
-    if (this.trades.length === 0) {
-      return { totalPL: 0, winRate: 0, totalTrades: 0, avgRR: '1:0', bestTrade: 0, worstTrade: 0 };
-    }
-    const totalPL = this.trades.reduce((sum, t) => sum + (t.netPL || 0), 0);
-    const wins = this.trades.filter(t => t.netPL > 0).length;
-    const winRate = this.trades.length > 0 ? Math.round((wins / this.trades.length) * 100) : 0;
-    const bestTrade = Math.max(0, ...this.trades.map(t => t.netPL));
-    const worstTrade = Math.min(0, ...this.trades.map(t => t.netPL));
-    const validRRTrades = this.trades.filter(t => t.riskRewardRatio > 0);
-    const avgRRNum = validRRTrades.length > 0
-      ? (validRRTrades.reduce((sum, t) => sum + t.riskRewardRatio, 0) / validRRTrades.length).toFixed(2)
-      : '0.00';
-    return { totalPL, winRate, totalTrades: this.trades.length, avgRR: '1:' + avgRRNum, bestTrade, worstTrade };
-  }
-
-  renderDashboard() {
-    this.loadTickerTapeWidget(); // ** BUG FIX: Load ticker on dashboard render **
-    const s = this.calculateStats();
-    const totalPLEl = document.getElementById('totalPL');
-    totalPLEl.textContent = this.formatCurrency(s.totalPL);
-    totalPLEl.className = 'stat-value ' + (s.totalPL >= 0 ? 'positive' : 'negative');
-    document.getElementById('winRate').textContent = s.winRate + '%';
-    document.getElementById('totalTrades').textContent = s.totalTrades;
-    document.getElementById('avgRR').textContent = s.avgRR;
-    const list = document.getElementById('recentTradesList');
-    if (this.trades.length === 0) {
-      list.innerHTML = '<div class="empty-state">No trades yet. Click "Add New Trade" to get started!</div>';
-    } else {
-      list.innerHTML = this.trades.slice(0, 4).map(t => `
-        <div class="trade-item" onclick="app.showTradeDetails('${t.id}')">
-            <div class="trade-info">
-            <span class="trade-symbol">${t.symbol}</span>
-            <span class="trade-direction ${t.direction.toLowerCase()}">${t.direction}</span>
-            <span class="trade-date">${this.formatDate(t.entryDate)}</span>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Journal - Professional Trading Tracker</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+</head>
+<body>
+    <div id="authScreen" class="auth-screen">
+        <div class="auth-container">
+            <div class="auth-header">
+                <h1>
+                    <img src="/favicon.png" alt="Logo" style="width: 50px; height: 50px; vertical-align: middle;">
+                    TraderLog
+                </h1>
+                <p>Professional Trading Tracker & Analytics</p>
             </div>
-            <div class="trade-pl ${t.netPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(t.netPL)}</div>
-        </div>`).join('');
-    }
-    this.drawDashboardPLChart();
-    this.renderDashboardAIFeedback();
-    this.buildDashboardCalendar();
-  }
-  
-  renderNews() {
-    this.loadNewsWidget(); // ** BUG FIX: Load news feed on news section render **
-  }
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="login">Login</button>
+                <button class="auth-tab" data-tab="signup">Sign Up</button>
+            </div>
+            <div id="loginForm" class="auth-form active">
+                <h2>Welcome Back</h2>
+                <form id="loginFormElement" novalidate>
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" name="email" class="form-control" required placeholder="Enter your email">
+                        <div class="form-error" id="login-email-error"></div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input type="password" name="password" class="form-control" required placeholder="Enter password">
+                        <div class="form-error" id="login-password-error"></div>
+                    </div>
+                    <button type="submit" class="btn btn--primary btn--full-width">Login</button>
+                </form>
+            </div>
+            <div id="signupForm" class="auth-form">
+                <h2>Create Account</h2>
+                <form id="signupFormElement" novalidate>
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" name="email" class="form-control" required placeholder="Enter your email">
+                        <div class="form-error" id="signup-email-error"></div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input type="password" name="password" class="form-control" required placeholder="Create a password" minlength="8">
+                        <div class="form-error" id="signup-password-error"></div>
+                        <small class="form-help">Minimum 8 characters</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Confirm Password</label>
+                        <input type="password" name="confirmPassword" class="form-control" required placeholder="Confirm your password">
+                        <div class="form-error"id="signup-confirmPassword-error"></div>
+                    </div>
+                    <button type="submit" class="btn btn--primary btn--full-width">Create Account</button>
+                </form>
+            </div>
 
-  async saveDailyConfidence() {
-    const level = parseInt(document.getElementById('dailyConfidence').value, 10);
-    const today = new Date().toISOString().split('T')[0];
-    const existing = this.confidenceEntries.find(c => c.date === today);
-    if (existing) {
-      this.showToast("You've already recorded confidence today!", 'warning');
-      return;
-    }
-    try {
-      const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('confidence').add({
-        date: today,
-        level: level,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      this.allConfidence.unshift({ id: docRef.id, date: today, level });
-      document.getElementById('confidenceMessage').innerHTML = "<div class='message success'>Daily confidence recorded successfully!</div>";
-      this.showToast('Daily confidence recorded!', 'success');
-      document.dispatchEvent(new CustomEvent('data-changed'));
-    } catch (error) {
-      this.showToast(`Error saving confidence: ${error.message}`, 'error');
-    }
-  }
-
-  /* ----------------------- ADD TRADE FORM ------------------------------ */
-  renderAddTrade() {
-    const now = new Date();
-    const entryDateEl = document.querySelector('input[name="entryDate"]');
-    const exitDateEl = document.querySelector('input[name="exitDate"]');
-    if (entryDateEl) entryDateEl.value = now.toISOString().slice(0, 16);
-    if (exitDateEl) exitDateEl.value = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 16);
-  }
-
-  setupAddTradeForm() {
-    const form = document.getElementById('addTradeForm');
-    form.querySelectorAll('.range-input').forEach(slider => {
-      const display = slider.parentElement.querySelector('.range-value');
-      if (display) {
-        slider.addEventListener('input', () => (display.textContent = slider.value));
-      }
-    });
-    const calcFields = ['quantity', 'entryPrice', 'exitPrice', 'stopLoss', 'targetPrice', 'direction'];
-    calcFields.forEach(name => {
-      form.querySelector(`[name="${name}"]`)?.addEventListener('input', () => this.updateCalculations());
-    });
-    form.addEventListener('submit', e => {
-      e.preventDefault();
-      this.submitTrade();
-    });
-    document.getElementById('resetTradeForm').addEventListener('click', () => {
-      form.reset();
-      this.updateCalculations();
-      this.renderAddTrade();
-      form.querySelectorAll('.range-value').forEach(el => el.textContent = '5');
-      document.getElementById('otherStrategyGroup').classList.add('hidden');
-    });
-
-    const strategySelect = document.getElementById('addTradeStrategySelect');
-    const otherStrategyGroup = document.getElementById('otherStrategyGroup');
-    if (strategySelect && otherStrategyGroup) {
-        strategySelect.addEventListener('change', function() {
-            if (this.value === 'Other') {
-                otherStrategyGroup.classList.remove('hidden');
-            } else {
-                otherStrategyGroup.classList.add('hidden');
-            }
-        });
-    }
-  }
-
-  updateCalculations() {
-    const fd = new FormData(document.getElementById('addTradeForm'));
-    const qty = parseFloat(fd.get('quantity')) || 0;
-    const entry = parseFloat(fd.get('entryPrice')) || 0;
-    const exit = parseFloat(fd.get('exitPrice')) || 0;
-    const sl = parseFloat(fd.get('stopLoss')) || 0;
-    const target = parseFloat(fd.get('targetPrice')) || 0;
-    const dir = fd.get('direction');
-    let gross = (qty && entry && exit) ? (dir === 'Long' ? (exit - entry) * qty : (entry - exit) * qty) : 0;
-    const net = gross - 40;
-    let riskReward = 0;
-    if (qty && entry && sl && target && dir) {
-      const risk = Math.abs(entry - sl);
-      const reward = Math.abs(target - entry);
-      if (risk > 0) riskReward = reward / risk;
-    }
-    document.getElementById('calcGrossPL').textContent = this.formatCurrency(gross);
-    document.getElementById('calcNetPL').textContent = this.formatCurrency(net);
-    document.getElementById('calcRiskReward').textContent = '1:' + riskReward.toFixed(2);
-  }
-
-  getCheckboxValues(form, name) {
-    return Array.from(form.querySelectorAll(`input[name="${name}"]:checked`)).map(cb => cb.value);
-  }
-
-  getRadioValue(form, name) {
-    const radio = form.querySelector(`input[name="${name}"]:checked`);
-    return radio ? radio.value : '';
-  }
-
-  async submitTrade() {
-    const form = document.getElementById('addTradeForm');
-    const fd = new FormData(form);
-    form.querySelectorAll('.form-error').forEach(e => e.classList.remove('active'));
-    if (!this.currentUser) {
-      this.showToast('You must be logged in to add a trade.', 'error');
-      return;
-    }
-
-    let finalStrategy = fd.get('strategy');
-    if (finalStrategy === 'Other') {
-        const customStrategy = fd.get('other_strategy').trim();
-        finalStrategy = customStrategy || 'Other (unspecified)';
-    }
-
-    const trade = {
-      symbol: fd.get('symbol').toUpperCase(),
-      direction: fd.get('direction'),
-      quantity: parseFloat(fd.get('quantity')),
-      entryPrice: parseFloat(fd.get('entryPrice')),
-      exitPrice: parseFloat(fd.get('exitPrice')),
-      stopLoss: parseFloat(fd.get('stopLoss')) || null,
-      targetPrice: parseFloat(fd.get('targetPrice')) || null,
-      strategy: finalStrategy,
-      exitReason: fd.get('exitReason') || 'N/A',
-      confidenceLevel: parseInt(fd.get('confidenceLevel')),
-      entryDate: fd.get('entryDate'),
-      exitDate: fd.get('exitDate'),
-      preEmotion: fd.get('preEmotion') || '',
-      postEmotion: fd.get('postEmotion') || '',
-      notes: fd.get('notes') || '',
-      sleepQuality: parseInt(fd.get('sleepQuality')) || 5,
-      physicalCondition: parseInt(fd.get('physicalCondition')) || 5,
-      marketSentiment: fd.get('marketSentiment') || '',
-      newsAwareness: fd.get('newsAwareness') || '',
-      marketEnvironment: fd.get('marketEnvironment') || '',
-      fomoLevel: parseInt(fd.get('fomoLevel')) || 1,
-      preStress: parseInt(fd.get('preStress')) || 1,
-      multiTimeframes: this.getCheckboxValues(form, 'multiTimeframes'),
-      volumeAnalysis: fd.get('volumeAnalysis') || '',
-      technicalConfluence: this.getCheckboxValues(form, 'technicalConfluence'),
-      marketSession: fd.get('marketSession') || '',
-      tradeCatalyst: fd.get('tradeCatalyst') || '',
-      waitedForSetup: this.getRadioValue(form, 'waitedForSetup'),
-      positionComfort: parseInt(fd.get('positionComfort')) || 5,
-      planDeviation: fd.get('planDeviation') || '',
-      stressDuring: parseInt(fd.get('stressDuring')) || 1,
-      primaryExitReason: fd.get('primaryExitReason') || '',
-      exitEmotion: fd.get('exitEmotion') || '',
-      wouldTakeAgain: this.getRadioValue(form, 'wouldTakeAgain'),
-      lesson: fd.get('lesson') || '',
-      volatilityToday: fd.get('volatilityToday') || '',
-      sectorPerformance: fd.get('sectorPerformance') || '',
-      economicEvents: this.getCheckboxValues(form, 'economicEvents'),
-      personalDistractions: this.getCheckboxValues(form, 'personalDistractions'),
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
-    trade.grossPL = trade.direction === 'Long' ? (trade.exitPrice - trade.entryPrice) * trade.quantity : (trade.entryPrice - trade.exitPrice) * trade.quantity;
-    trade.netPL = trade.grossPL - 40;
-    if (trade.stopLoss && trade.targetPrice) {
-      const risk = Math.abs(trade.entryPrice - trade.stopLoss);
-      const reward = Math.abs(trade.targetPrice - trade.entryPrice);
-      trade.riskRewardRatio = risk ? reward / risk : 0;
-    } else {
-      trade.riskRewardRatio = 0;
-    }
-    try {
-      const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('trades').add(trade);
-      this.allTrades.unshift({ id: docRef.id, ...trade });
-      this.showToast('Trade saved successfully!', 'success');
-      form.reset();
-      this.updateCalculations();
-      this.renderAddTrade();
-      document.getElementById('otherStrategyGroup').classList.add('hidden');
-      document.dispatchEvent(new CustomEvent('data-changed'));
-      this.showSection('dashboard');
-    } catch (error) {
-      console.error('[DATA] Firestore insert error:', error);
-      this.showToast(`Error saving trade: ${error.message}`, 'error');
-    }
-  }
-
-  /* ---------------------------- HISTORY ------------------------------- */
-  renderHistory() {
-    const container = document.getElementById('historyContent');
-    if (this.trades.length === 0) {
-      container.innerHTML = '<div class="empty-state">No trades recorded yet.</div>';
-      return;
-    }
-    const symbols = [...new Set(this.trades.map(t => t.symbol))];
-    const symbolFilter = document.getElementById('symbolFilter');
-    symbolFilter.innerHTML = '<option value="">All Symbols</option>' + symbols.map(s => `<option value="${s}">${s}</option>`).join('');
-    
-    const strategies = [...new Set(this.trades.map(t => t.strategy))];
-
-    const strategyFilter = document.getElementById('strategyFilter');
-    strategyFilter.innerHTML = '<option value="">All Strategies</option>' + strategies.map(s => `<option value="${s}">${s}</option>`).join('');
-    const applyFilters = () => {
-      const symVal = symbolFilter.value;
-      const stratVal = strategyFilter.value;
-      const filtered = this.trades.filter(t => (!symVal || t.symbol === symVal) && (!stratVal || t.strategy === stratVal));
-      renderTable(filtered);
-    };
-    symbolFilter.onchange = strategyFilter.onchange = applyFilters;
-    const renderTable = rows => {
-      if (rows.length === 0) {
-        container.innerHTML = '<div class="empty-state">No trades match filter.</div>';
-        return;
-      }
-      container.innerHTML = `
-        <div class="card"><table class="trade-table"><thead>
-          <tr><th>Date</th><th>Symbol</th><th>Dir</th><th>Qty</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Strategy</th></tr>
-        </thead><tbody>
-          ${rows.map(t => `
-            <tr onclick="app.showTradeDetails('${t.id}')">
-              <td data-label="Date">${this.formatDate(t.entryDate)}</td>
-              <td data-label="Symbol">${t.symbol}</td>
-              <td data-label="Direction"><span class="trade-direction ${t.direction.toLowerCase()}">${t.direction}</span></td>
-              <td data-label="Qty">${t.quantity}</td>
-              <td data-label="Entry">${this.formatCurrency(t.entryPrice)}</td>
-              <td data-label="Exit">${this.formatCurrency(t.exitPrice)}</td>
-              <td data-label="P&L" class="${t.netPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(t.netPL)}</td>
-              <td data-label="Strategy">${t.strategy}</td>
-            </tr>`).join('')}
-        </tbody></table></div>`;
-    };
-    applyFilters();
-  }
-
-  /* -------------------------- MODAL & DETAILS ------------------------------ */
-  showTradeDetails(id) {
-    const t = this.trades.find(tr => tr.id === id);
-    if (!t) return;
-    const rrText = t.riskRewardRatio ? t.riskRewardRatio.toFixed(2) : '0.00';
-    const body = document.getElementById('tradeModalBody');
-    body.innerHTML = `<div class="trade-detail-grid">
-      <div class="trade-detail-item"><div class="trade-detail-label">Symbol</div><div class="trade-detail-value">${t.symbol}</div></div>
-      <div class="trade-detail-item"><div class="trade-detail-label">Direction</div><div class="trade-detail-value"><span class="trade-direction ${t.direction.toLowerCase()}">${t.direction}</span></div></div>
-      <div class="trade-detail-item"><div class="trade-detail-label">Quantity</div><div class="trade-detail-value">${t.quantity}</div></div>
-      <div class="trade-detail-item"><div class="trade-detail-label">Entry Price</div><div class="trade-detail-value">${this.formatCurrency(t.entryPrice)}</div></div>
-      <div class="trade-detail-item"><div class="trade-detail-label">Exit Price</div><div class="trade-detail-value">${this.formatCurrency(t.exitPrice)}</div></div>
-      <div class="trade-detail-item"><div class="trade-detail-label">Gross P&L</div><div class="trade-detail-value ${t.grossPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(t.grossPL)}</div></div>
-      <div class="trade-detail-item"><div class="trade-detail-label">Net P&L</div><div class="trade-detail-value ${t.netPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(t.netPL)}</div></div>
-      <div class="trade-detail-item"><div class="trade-detail-label">Risk:Reward</div><div class="trade-detail-value">1:${rrText}</div></div>
-      <div class="trade-detail-item"><div class="trade-detail-label">Strategy</div><div class="trade-detail-value">${t.strategy}</div></div>
-      <div class="trade-detail-item"><div class="trade-detail-label">Sleep Quality</div><div class="trade-detail-value">${t.sleepQuality || 'N/A'}/10</div></div>
-      <div class="trade-detail-item"><div class="trade-detail-label">Pre-Stress</div><div class="trade-detail-value">${t.preStress || 'N/A'}/10</div></div>
-      <div class="trade-detail-item"><div class="trade-detail-label">FOMO Level</div><div class="trade-detail-value">${t.fomoLevel || 'N/A'}/10</div></div>
+            <div class="auth-divider"><span>OR</span></div>
+            <button id="googleSignInBtn" class="google-signin-btn">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo">
+                Sign in with Google
+            </button>
+            </div>
     </div>
-    ${t.notes ? `<div style="margin-top:16px;"><strong>Notes:</strong><p>${t.notes}</p></div>` : ''}
-    ${t.lesson ? `<div style="margin-top:16px;"><strong>Lesson Learned:</strong><p>${t.lesson}</p></div>` : ''}`;
-    document.getElementById('tradeModal').classList.remove('hidden');
-  }
 
-  hideTradeModal() { document.getElementById('tradeModal').classList.add('hidden'); }
-  /* ---------------------- NEW DASHBOARD HELPERS ----------------------------- */
-  drawDashboardPLChart() {
-    const ctx = document.getElementById('dashboardPlChart');
-    if (!ctx) return;
-    if (this.charts.dashboardPl) {
-      this.charts.dashboardPl.destroy();
-    }
-    if (this.trades.length < 2) {
-      const context = ctx.getContext('2d');
-      context.clearRect(0, 0, ctx.width, ctx.height);
-      context.fillStyle = 'grey';
-      context.textAlign = 'center';
-      context.fillText('Need at least 2 trades to show a curve.', ctx.width / 2, ctx.height / 2);
-      return;
-    }
-    const sorted = [...this.trades].sort((a, b) => new Date(a.entryDate) - new Date(b.entryDate));
-    const labels = sorted.map((t, i) => `Trade ${i + 1}`);
-    const data = [];
-    let cumulativePL = 0;
-    sorted.forEach(trade => {
-      cumulativePL += trade.netPL || 0;
-      data.push(cumulativePL);
-    });
-    this.charts.dashboardPl = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [{
-          label: 'Cumulative P&L',
-          data: data,
-          borderColor: 'rgba(31, 184, 205, 0.8)',
-          backgroundColor: 'rgba(31, 184, 205, 0.1)',
-          fill: true,
-          tension: 0.4,
-          pointRadius: 0,
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: false
-          }
-        },
-        scales: {
-          y: {
-            beginAtZero: false,
-            ticks: {
-              font: { size: 10 },
-              callback: (value) => this.formatCurrency(value).replace('.00', '')
-            }
-          },
-          x: {
-            display: false
-          }
-        }
-      }
-    });
-  }
-
-  renderDashboardAIFeedback() {
-    const container = document.getElementById('dashboardAiFeedback');
-    if (!container) return;
-    if (this.trades.length < 3) {
-      container.innerHTML = '<div class="empty-state">Add more trades for AI feedback.</div>';
-      return;
-    }
-    container.innerHTML = this.generateAIFeedback();
-  }
-
-  /* -------------------------- ANALYTICS & CHARTS ------------------------------ */
-  renderAnalytics() {
-    const s = this.calculateStats();
-    document.getElementById('analyticsTotalTrades').textContent = s.totalTrades;
-    document.getElementById('analyticsWinRate').textContent = s.winRate + '%';
-    const netEl = document.getElementById('analyticsNetPL');
-    netEl.textContent = this.formatCurrency(s.totalPL);
-    netEl.className = 'value ' + (s.totalPL >= 0 ? 'positive' : 'negative');
-    document.getElementById('analyticsBestTrade').textContent = this.formatCurrency(s.bestTrade);
-    document.getElementById('analyticsWorstTrade').textContent = this.formatCurrency(s.worstTrade);
-    document.getElementById('analyticsAvgRR').textContent = s.avgRR;
-    if (typeof Chart === 'undefined') return;
-    setTimeout(() => {
-      this.drawPLChart();
-      this.drawRRChart();
-      this.drawStrategyChart();
-      this.renderTimeTables();
-    }, 50);
-  }
-
-  drawPLChart() {
-    const ctx = document.getElementById('plChart');
-    if (!ctx) return;
-    this.charts.pl?.destroy();
-    if (this.trades.length < 2) { ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height); return; }
-    const sorted = [...this.trades].sort((a, b) => new Date(a.entryDate) - new Date(b.entryDate));
-    const labels = [];
-    const cum = [];
-    let run = 0;
-    sorted.forEach(t => { run += t.netPL; labels.push(this.formatDate(t.entryDate)); cum.push(run); });
-    this.charts.pl = new Chart(ctx, {
-      type: 'line',
-      data: { labels, datasets: [{ label: 'Cumulative P&L', data: cum, borderColor: '#1FB8CD', backgroundColor: 'rgba(31,184,205,0.15)', tension: 0.4, fill: true }] },
-      options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: false, ticks: { callback: v => this.formatCurrency(v) } } } }
-    });
-  }
-
-  drawRRChart() {
-    const ctx = document.getElementById('rrChart');
-    if (!ctx) return;
-    this.charts.rr?.destroy();
-    if (this.trades.length === 0) { ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height); return; }
-    const buckets = { '<1:1': 0, '1:1-1:2': 0, '1:2-1:3': 0, '>1:3': 0 };
-    this.trades.forEach(t => {
-      const rr = t.riskRewardRatio || 0;
-      if (rr < 1) buckets['<1:1']++; else if (rr < 2) buckets['1:1-1:2']++; else if (rr < 3) buckets['1:2-1:3']++; else buckets['>1:3']++;
-    });
-    this.charts.rr = new Chart(ctx, {
-      type: 'bar',
-      data: { labels: Object.keys(buckets), datasets: [{ label: '# of Trades', data: Object.values(buckets), backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'] }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-    });
-  }
-
-  drawStrategyChart() {
-    const ctx = document.getElementById('strategyChart');
-    if (!ctx) return;
-    this.charts.strategy?.destroy();
-    if (this.trades.length === 0) { ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height); return; }
-    const map = {};
-    this.trades.forEach(t => {
-      if (!map[t.strategy]) map[t.strategy] = { total: 0, wins: 0 };
-      map[t.strategy].total++;
-      if (t.netPL > 0) map[t.strategy].wins++;
-    });
-    const labels = Object.keys(map);
-    const data = labels.map(l => Math.round((map[l].wins / map[l].total) * 100));
-    this.charts.strategy = new Chart(ctx, {
-      type: 'bar',
-      data: { labels, datasets: [{ label: 'Win Rate %', data, backgroundColor: '#4BC0C0' }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } } }
-    });
-  }
-
-  renderTimeTables() {
-    const container = document.getElementById('timeChart').parentElement;
-    container.querySelectorAll('.time-table').forEach(n => n.remove());
-    if (this.trades.length === 0) return;
-    const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const dowMap = Object.fromEntries(dowNames.map(d => [d, { total: 0, wins: 0, net: 0 }]));
-    this.trades.forEach(t => {
-      const d = new Date(t.entryDate);
-      const dow = dowNames[d.getDay()];
-      dowMap[dow].total++;
-      if (t.netPL > 0) dowMap[dow].wins++;
-      dowMap[dow].net += t.netPL;
-    });
-    const makeTable = (title, rows) => {
-      const div = document.createElement('div');
-      div.className = 'time-table';
-      div.innerHTML = `<h4>${title}</h4><table class="trade-table"><thead><tr><th>Period</th><th>Trades</th><th>Win %</th><th>Net P&L</th></tr></thead><tbody>${rows}</tbody></table>`;
-      container.appendChild(div);
-    };
-    const dowRows = dowNames.filter(d => dowMap[d].total > 0).map(d => {
-      const o = dowMap[d];
-      const win = o.total > 0 ? Math.round((o.wins / o.total) * 100) : 0;
-      return `<tr><td>${d}</td><td>${o.total}</td><td>${win}%</td><td class="${o.net >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(o.net)}</td></tr>`;
-    }).join('');
-    makeTable('Day-of-Week Analysis', dowRows);
-  }
-
-  /* ----------------------- AI SUGGESTIONS ----------------------------- */
-  renderAISuggestions() {
-    if (this.trades.length < 3) {
-      document.getElementById('smartInsight').textContent = "Add at least 3 trades to start receiving AI-powered suggestions and insights.";
-      document.querySelectorAll('.suggestion-content').forEach(el => el.innerHTML = '<div class="empty-state">Not enough data.</div>');
-      return;
-    }
-    const s = this.calculateStats();
-    document.getElementById('smartInsight').textContent = s.totalPL >= 0 ?
-      `Great job! You're net positive ${this.formatCurrency(s.totalPL)} with a ${s.winRate}% win rate.` :
-      `You're net negative ${this.formatCurrency(s.totalPL)}. Focus on improving risk management and strategy selection.`;
-    document.getElementById('aiFeedback').innerHTML = this.generateAIFeedback();
-    document.getElementById('edgeAnalyzer').innerHTML = this.analyzeTradingEdge();
-    document.getElementById('repeatTrades').innerHTML = this.findRepeatLosingTrades();
-    document.getElementById('entryAnalysis').innerHTML = this.analyzeEntries();
-    document.getElementById('emotionalBias').innerHTML = this.analyzeEmotionalBias();
-    document.getElementById('setupQuality').innerHTML = this.calculateSetupQuality();
-    document.getElementById('timeConfidence').innerHTML = this.analyzeTimeBasedConfidence();
-    this.drawConfidenceChart();
-  }
-
-  drawConfidenceChart() {
-    const ctx = document.getElementById('confidenceChart');
-    if (!ctx) return;
-    this.charts.conf?.destroy();
-    if (this.confidenceEntries.length < 2) {
-      ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height);
-      document.getElementById('confidenceAnalysis').innerHTML = '<div class="suggestion-item suggestion-info"><div class="suggestion-title">Not Enough Data</div><div class="suggestion-desc">Record daily confidence to see chart.</div></div>';
-      return;
-    }
-    const avg = (this.confidenceEntries.reduce((sum, c) => sum + c.level, 0) / this.confidenceEntries.length).toFixed(1);
-    document.getElementById('confidenceAnalysis').innerHTML = `<div class="suggestion-item suggestion-info"><div class="suggestion-title">Avg Confidence</div><div class="suggestion-desc">${avg}/10 over ${this.confidenceEntries.length} days</div></div>`;
-    const sorted = [...this.confidenceEntries].sort((a, b) => new Date(a.date) - new Date(b.date));
-    this.charts.conf = new Chart(ctx, { type: 'line', data: { labels: sorted.map(c => this.formatDate(c.date)), datasets: [{ label: 'Confidence', data: sorted.map(c => c.level), borderColor: '#1FB8CD', tension: 0.3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { min: 1, max: 10, ticks: { stepSize: 1 } } } } });
-  }
-
-  bestStrategy() {
-    if (this.trades.length === 0) return 'N/A';
-    const map = {};
-    this.trades.forEach(t => {
-      if (t.strategy && t.strategy !== 'N/A') {
-        map[t.strategy] = (map[t.strategy] || 0) + t.netPL
-      }
-    });
-    const sortedStrategies = Object.entries(map).sort((a, b) => b[1] - a[1]);
-    return sortedStrategies.length > 0 ? sortedStrategies[0][0] : 'N/A';
-  }
-
-  /* ------------------------ REPORTS & CALENDAR ------------------------ */
-  renderReports() {
-    this.buildCalendar();
-    document.getElementById('weeklyReport').innerHTML = this.generateWeeklyReport();
-    document.getElementById('monthlyReport').innerHTML = this.generateMonthlyReport();
-    document.getElementById('strategyReport').innerHTML = this.generateStrategyReport();
-    document.getElementById('emotionalReport').innerHTML = this.generateEmotionalReport();
-  }
-
-  changeCalendarMonth(offset) {
-    this.currentCalendarDate.setMonth(this.currentCalendarDate.getMonth() + offset);
-    if (document.getElementById('dashboard').classList.contains('active')) {
-        this.buildDashboardCalendar();
-    }
-    if (document.getElementById('reports').classList.contains('active')) {
-        this.buildCalendar();
-    }
-  }
-  
-  buildCalendar() {
-    const date = this.currentCalendarDate;
-    const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-    const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-    document.getElementById('currentMonth').textContent = monthStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-    const cal = document.getElementById('plCalendar');
-    cal.innerHTML = '';
-    ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(d => {
-      const headerEl = document.createElement('div');
-      headerEl.className = 'calendar-day header';
-      headerEl.textContent = d;
-      cal.appendChild(headerEl);
-    });
-    for (let i = 0; i < monthStart.getDay(); i++) {
-      const spacerEl = document.createElement('div');
-      spacerEl.className = 'calendar-day no-trades';
-      cal.appendChild(spacerEl);
-    }
-    for (let d = 1; d <= monthEnd.getDate(); d++) {
-      const dayEl = document.createElement('div');
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const tradesOnDay = this.trades.filter(t => t.entryDate && t.entryDate.startsWith(key));
-      let cls = 'no-trades';
-      if (tradesOnDay.length > 0) {
-        const pl = tradesOnDay.reduce((sum, t) => sum + t.netPL, 0);
-        if (pl > 1000) cls = 'profit-high';
-        else if (pl > 0) cls = 'profit-low';
-        else if (pl < -1000) cls = 'loss-high';
-        else if (pl < 0) cls = 'loss-low';
-        else cls = 'profit-low';
-        dayEl.addEventListener('mouseenter', (e) => this.showCalendarTooltip(e, tradesOnDay, key));
-        dayEl.addEventListener('mousemove', (e) => this.updateTooltipPosition(e));
-        dayEl.addEventListener('mouseleave', () => this.hideCalendarTooltip());
-      }
-      dayEl.className = `calendar-day ${cls}`;
-      dayEl.textContent = d;
-      cal.appendChild(dayEl);
-    }
-  }
-
-  showCalendarTooltip(event, trades, dateKey) {
-    const tooltip = document.getElementById('calendarTooltip');
-    const formattedDate = new Date(dateKey).toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-    let content = `<h4>Trades for ${formattedDate}</h4>`;
-    trades.forEach(trade => {
-      content += `
-            <div class="calendar-tooltip-trade">
-                <span class="symbol">${trade.symbol}</span>
-                <span class="pl ${trade.netPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(trade.netPL)}</span>
+    <div id="mainApp" class="main-app hidden">
+        <nav class="navbar">
+            <div class="nav-container">
+                <div class="nav-brand">
+                    <div class="nav-brand">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <img src="/favicon.png" alt="Logo" style="width: 50px; height: 50px;">
+                            <h2 style="margin: 0;">TraderLog</h2>
+                        </div>
+                    </div>
+                </div>
+                <ul class="nav-menu">
+                    <li class="nav-item"><button class="nav-link active" data-section="dashboard">Dashboard</button></li>
+                    <li class="nav-item"><button class="nav-link" data-section="add-trade">Add Trade</button></li>
+                    <li class="nav-item"><button class="nav-link" data-section="history">Trade History</button></li>
+                    <li class="nav-item"><button class="nav-link" data-section="news">News</button></li>
+                    <li class="nav-item"><button class="nav-link" data-section="analytics">Analytics</button></li>
+                    <li class="nav-item"><button class="nav-link" data-section="ai-suggestions">AI Suggestions</button></li>
+                    <li class="nav-item"><button class="nav-link" data-section="reports">Reports</button></li>
+                </ul>
+                <div class="nav-user">
+                    <div class="user-info">
+                        <span class="user-name" id="currentUserEmail">User</span>
+                        <button class="theme-toggle" id="themeToggle">🌙</button>
+                        <button class="btn btn--outline btn--sm" id="logoutBtn">Logout</button>
+                    </div>
+                </div>
             </div>
-        `;
-    });
-    tooltip.innerHTML = content;
-    tooltip.style.display = 'block';
-    this.updateTooltipPosition(event);
-  }
+        </nav>
 
-  hideCalendarTooltip() {
-    const tooltip = document.getElementById('calendarTooltip');
-    tooltip.style.display = 'none';
-  }
+        <main class="main-content">
+            <section id="dashboard" class="section active">
+                <div class="container">
+                    
+                    <!-- Container for the Ticker Tape. The script is now loaded dynamically by app.js -->
+                    <div id="dashboard-ticker-tape-container" style="margin-bottom: 2rem;"></div>
 
-  updateTooltipPosition(event) {
-    const tooltip = document.getElementById('calendarTooltip');
-    tooltip.style.left = (event.pageX + 15) + 'px';
-    tooltip.style.top = (event.pageY + 15) + 'px';
-  }
+                    <div class="section-header">
+                        <h1>Trading Dashboard</h1>
+                        <div class="header-actions">
+                            <select id="currencySelector" class="form-control">
+                                <option value="₹">INR (₹)</option>
+                                <option value="$">USD ($)</option>
+                            </select>
+                            <button class="btn btn--primary" id="quickAddTrade">+ Add New Trade</button>
+                        </div>
+                    </div>
 
-  /* ------------------------ NEW REPORT & AI HELPERS ------------------------ */
+                    <div class="stats-grid">
+                        <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-content"><h3 id="totalPL" class="stat-value">₹0</h3><p>Total P&L</p></div></div>
+                        <div class="stat-card"><div class="stat-icon">📈</div><div class="stat-content"><h3 id="winRate" class="stat-value">0%</h3><p>Win Rate</p></div></div>
+                        <div class="stat-card"><div class="stat-icon">🎯</div><div class="stat-content"><h3 id="totalTrades" class="stat-value">0</h3><p>Total Trades</p></div></div>
+                        <div class="stat-card"><div class="stat-icon">⚖️</div><div class="stat-content"><h3 id="avgRR" class="stat-value">1:0</h3><p>Avg Risk:Reward</p></div></div>
+                    </div>
 
-  generateWeeklyReport() {
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const weeklyTrades = this.trades.filter(t => new Date(t.entryDate) >= oneWeekAgo);
-    if (weeklyTrades.length === 0) return '<div class="empty-state">No trades in the last 7 days.</div>';
-    const stats = this.calculateStatsForTrades(weeklyTrades);
-    return `
-      <div class="report-item"><span>Trades:</span><span>${stats.totalTrades}</span></div>
-      <div class="report-item"><span>Win Rate:</span><span>${stats.winRate}%</span></div>
-      <div class="report-item"><span>Net P&L:</span><span class="${stats.totalPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(stats.totalPL)}</span></div>
-    `;
-  }
+                    <div class="dashboard-main-grid">
+                        <!-- Left Column -->
+                        <div class="dashboard-col-left">
+                            <div id="plCard" class="card">
+                                <div class="card__header">
+                                    <h3>Analytics Snapshot</h3>
+                                    <button class="view-all-link" data-section="analytics">View Details</button>
+                                </div>
+                                <div class="card__body">
+                                    <h4>P&L Curve</h4>
+                                    <div class="dashboard-chart-container">
+                                        <canvas id="dashboardPlChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="recent-trades card">
+                                <div class="card__header">
+                                    <h3>Recent Trades</h3>
+                                    <button class="view-all-link" data-section="history">View All</button>
+                                </div>
+                                <div class="card__body">
+                                    <div id="recentTradesList">
+                                        <div class="loading">Loading recent trades...</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
-  generateMonthlyReport() {
-    const thisMonth = new Date().getMonth();
-    const thisYear = new Date().getFullYear();
-    const monthlyTrades = this.trades.filter(t => {
-      const tradeDate = new Date(t.entryDate);
-      return tradeDate.getMonth() === thisMonth && tradeDate.getFullYear() === thisYear;
-    });
-    if (monthlyTrades.length === 0) return '<div class="empty-state">No trades this month.</div>';
-    const stats = this.calculateStatsForTrades(monthlyTrades);
-    return `
-      <div class="report-item"><span>Trades:</span><span>${stats.totalTrades}</span></div>
-      <div class="report-item"><span>Win Rate:</span><span>${stats.winRate}%</span></div>
-      <div class="report-item"><span>Net P&L:</span><span class="${stats.totalPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(stats.totalPL)}</span></div>
-      <div class="report-item"><span>Best Trade:</span><span class="positive">${this.formatCurrency(stats.bestTrade)}</span></div>
-      <div class="report-item"><span>Worst Trade:</span><span class="negative">${this.formatCurrency(stats.worstTrade)}</span></div>
-    `;
-  }
+                        <!-- Right Column -->
+                        <div class="dashboard-col-right">
+                            <div class="confidence-tracker card">
+                                <div class="card__body">
+                                    <h3>How are you feeling today?</h3>
+                                    <div class="confidence-controls">
+                                        <div class="confidence-slider-container">
+                                            <label for="dailyConfidence" class="form-label">Confidence (1-10)</label>
+                                            <input type="range" id="dailyConfidence" class="range-input" min="1" max="10" value="5">
+                                            <div class="range-value" id="confidenceValue">5</div>
+                                        </div>
+                                        <button class="btn btn--primary" id="saveConfidenceBtn">Submit</button>
+                                    </div>
+                                    <div id="confidenceMessage" class="confidence-message"></div>
+                                </div>
+                            </div>
+                            <div id="aiCard" class="card">
+                                <div class="card__header">
+                                    <h3>AI Suggestions</h3>
+                                    <button class="view-all-link" data-section="ai-suggestions">More Insights</button>
+                                </div>
+                                <div class="card__body">
+                                    <div id="dashboardAiFeedback" class="suggestion-content">
+                                        <div class="loading">Loading AI feedback...</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="dashboardCalendarCard" class="card">
+                                <div class="card__header">
+                                    <h3>P&L Calendar</h3>
+                                    <div class="calendar-nav">
+                                        <button class="btn btn--outline btn--sm" id="dashPrevMonth">‹</button>
+                                        <span id="dashCurrentMonth">Loading...</span>
+                                        <button class="btn btn--outline btn--sm" id="dashNextMonth">›</button>
+                                    </div>
+                                </div>
+                                <div class="card__body">
+                                    <div id="dashPlCalendar" class="pl-calendar"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
 
-  generateStrategyReport() {
-    const byStrategy = {};
-    this.trades.forEach(t => {
-      if (!t.strategy) return;
-      if (!byStrategy[t.strategy]) byStrategy[t.strategy] = [];
-      byStrategy[t.strategy].push(t);
-    });
-    if (Object.keys(byStrategy).length === 0) return '<div class="empty-state">No strategies defined.</div>';
-    let table = '<table class="report-table"><thead><tr><th>Strategy</th><th>Trades</th><th>Win %</th><th>Net P&L</th></tr></thead><tbody>';
-    for (const strategy in byStrategy) {
-      const stats = this.calculateStatsForTrades(byStrategy[strategy]);
-      table += `
-        <tr>
-          <td>${strategy}</td>
-          <td>${stats.totalTrades}</td>
-          <td>${stats.winRate}%</td>
-          <td class="${stats.totalPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(stats.totalPL)}</td>
-        </tr>`;
-    }
-    table += '</tbody></table>';
-    return table;
-  }
+            <section id="add-trade" class="section">
+                <div class="container">
+                    <div class="section-header"><h1>Add New Trade</h1><p>Record all details of your trade for complete analysis</p></div>
+                    <div class="add-trade-container">
+                        <div class="card add-trade-card">
+                            <div class="card__header"><h3>Trade Information</h3></div>
+                            <div class="card__body">
+                                <form id="addTradeForm" novalidate>
+                                    <div class="form-grid">
+                                        <div class="form-group"><label class="form-label">Symbol *</label><input type="text" name="symbol" class="form-control" required placeholder="e.g., NIFTY, BANKNIFTY"><div class="form-error" id="symbol-error"></div></div>
+                                        <div class="form-group"><label class="form-label">Direction *</label><select name="direction" class="form-control" required><option value="">Select Direction</option><option value="Long">Long</option><option value="Short">Short</option></select><div class="form-error" id="direction-error"></div></div>
+                                        <div class="form-group"><label class="form-label">Quantity *</label><input type="number" name="quantity" class="form-control" required placeholder="Number of shares/lots" min="1"><div class="form-error" id="quantity-error"></div></div>
+                                        <div class="form-group"><label class="form-label">Entry Price *</label><input type="number" name="entryPrice" class="form-control" required placeholder="Entry price" step="0.01" min="0"><div class="form-error" id="entryPrice-error"></div></div>
+                                        <div class="form-group"><label class="form-label">Exit Price *</label><input type="number" name="exitPrice" class="form-control" required placeholder="Exit price" step="0.01" min="0"><div class="form-error" id="exitPrice-error"></div></div>
+                                        <div class="form-group"><label class="form-label">Stop Loss</label><input type="number" name="stopLoss" class="form-control" placeholder="Stop loss price" step="0.01" min="0"></div>
+                                        <div class="form-group"><label class="form-label">Target Price</label><input type="number" name="targetPrice" class="form-control" placeholder="Target price" step="0.01" min="0"></div>
+                                        
+                                        <div class="form-group">
+                                            <label class="form-label">Strategy</label>
+                                            <select name="strategy" id="addTradeStrategySelect" class="form-control">
+                                                <option value="">Select Strategy</option>
+                                                <option value="Breakout + VWAP">Breakout + VWAP</option>
+                                                <option value="Support Resistance">Support Resistance</option>
+                                                <option value="Trendline Bounce">Trendline Bounce</option>
+                                                <option value="Breakout Failure">Breakout Failure</option>
+                                                <option value="Scalping">Scalping</option>
+                                                <option value="Swing Trading">Swing Trading</option>
+                                                <option value="Momentum Trading">Momentum Trading</option>
+                                                <option value="Position Trading">Position Trading</option>
+                                                <option value="Mean Reversion">Mean Reversion</option>
+                                                <option value="Pairs Trading">Pairs Trading</option>
+                                                <option value="Arbitrage">Arbitrage</option>
+                                                <option value="News-Based Trading">News-Based Trading</option>
+                                                <option value="Algorithmic Trading">Algorithmic Trading</option>
+                                                <option value="Carry Trade">Carry Trade</option>
+                                                <option value="Elliott Wave Theory">Elliott Wave Theory</option>
+                                                <option value="Gann Theory">Gann Theory</option>
+                                                <option value="Other">Other</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="form-group hidden" id="otherStrategyGroup">
+                                            <label class="form-label">Please specify strategy</label>
+                                            <input type="text" name="other_strategy" class="form-control" placeholder="Enter your custom strategy">
+                                        </div>
 
-  generateEmotionalReport() {
-    const preEmotions = {};
-    this.trades.forEach(t => {
-      if (!t.preEmotion) return;
-      if (!preEmotions[t.preEmotion]) preEmotions[t.preEmotion] = { total: 0, pl: 0 };
-      preEmotions[t.preEmotion].total++;
-      preEmotions[t.preEmotion].pl += t.netPL;
-    });
-    if (Object.keys(preEmotions).length === 0) return '<div class="empty-state">No emotional data recorded.</div>';
-    let mostProfitable = { emotion: 'N/A', avg: -Infinity };
-    let leastProfitable = { emotion: 'N/A', avg: Infinity };
-    for (const emotion in preEmotions) {
-      const avg = preEmotions[emotion].pl / preEmotions[emotion].total;
-      if (avg > mostProfitable.avg) mostProfitable = { emotion, avg };
-      if (avg < leastProfitable.avg) leastProfitable = { emotion, avg };
-    }
-    return `
-      <div class="report-item"><span>Most Profitable Emotion:</span><span>${mostProfitable.emotion} (${this.formatCurrency(mostProfitable.avg)}/trade)</span></div>
-      <div class="report-item"><span>Least Profitable Emotion:</span><span>${leastProfitable.emotion} (${this.formatCurrency(leastProfitable.avg)}/trade)</span></div>
-    `;
-  }
+                                        <div class="form-group"><label class="form-label">Exit Reason</label><select name="exitReason" class="form-control"><option value="">Select Exit Reason</option><option value="Target Hit">Target Hit</option><option value="SL Hit">Stop Loss Hit</option><option value="Manual Exit">Manual Exit</option><option value="Time Based Exit">Time Based Exit</option><option value="Breakeven">Breakeven</option><option value="Trailing Stop">Trailing Stop</option></select></div>
+                                        <div class="form-group"><label class="form-label">Confidence Level (1-10)</label><input type="range" name="confidenceLevel" class="range-input" min="1" max="10" value="5"><div class="range-value">5</div></div>
+                                        <div class="form-group"><label class="form-label">Entry Date *</label><input type="datetime-local" name="entryDate" class="form-control" required><div class="form-error" id="entryDate-error"></div></div>
+                                        <div class="form-group"><label class="form-label">Exit Date *</label><input type="datetime-local" name="exitDate" class="form-control" required><div class="form-error" id="exitDate-error"></div></div>
+                                        <div class="form-group"><label class="form-label">Pre-Trade Emotion</label><select name="preEmotion" class="form-control"><option value="">Select Emotion</option><option value="Confident">Confident</option><option value="Excited">Excited</option><option value="Nervous">Nervous</option><option value="Fearful">Fearful</option><option value="Neutral">Neutral</option><option value="Greedy">Greedy</option><option value="Impatient">Impatient</option></select></div>
+                                        <div class="form-group"><label class="form-label">Post-Trade Emotion</label><select name="postEmotion" class="form-control"><option value="">Select Emotion</option><option value="Satisfied">Satisfied</option><option value="Relieved">Relieved</option><option value="Disappointed">Disappointed</option><option value="Frustrated">Frustrated</option><option value="Regretful">Regretful</option><option value="Elated">Elated</option><option value="Neutral">Neutral</option></select></div>
+                                        <div class="form-group full-width"><label class="form-label">Notes</label><textarea name="notes" class="form-control" rows="3" placeholder="What went well, what went wrong, improvements needed..."></textarea></div>
+                                    </div>
 
-  generateAIFeedback() {
-    const stats = this.calculateStats();
-    let feedback = '';
-    if (stats.winRate < 50) {
-      feedback += `<div class="suggestion-item suggestion-warning">Your win rate is ${stats.winRate}%. Consider reviewing your entry criteria and risk management.</div>`;
-    } else {
-      feedback += `<div class="suggestion-item suggestion-good">Your win rate of ${stats.winRate}% is solid. Keep refining what works!</div>`;
-    }
-    const avgRR = parseFloat(stats.avgRR.split(':')[1]);
-    if (avgRR < 1.5) {
-      feedback += `<div class="suggestion-item suggestion-warning">Your average Risk:Reward is low (${stats.avgRR}). Aim for setups with a higher potential reward.</div>`;
-    }
-    return feedback;
-  }
+                                    <details class="collapse-card">
+                                        <summary>Pre-Trade Psychology</summary>
+                                        <div class="collapse-content">
+                                            <div class="form-grid">
+                                                <div class="form-group"><label class="form-label" title="How well did you sleep last night?">Sleep Quality (1-10)</label><input type="range" name="sleepQuality" class="range-input" min="1" max="10" value="5"><div class="range-value">5</div></div>
+                                                <div class="form-group"><label class="form-label" title="How is your physical energy today?">Physical Condition (1-10)</label><input type="range" name="physicalCondition" class="range-input" min="1" max="10" value="5"><div class="range-value">5</div></div>
+                                                <div class="form-group"><label class="form-label">Market Sentiment Assessment</label><select name="marketSentiment" class="form-control"><option value="">Select</option><option>Bullish</option><option>Bearish</option><option>Neutral</option><option>Uncertain</option></select></div>
+                                                <div class="form-group"><label class="form-label">News / Events Awareness</label><select name="newsAwareness" class="form-control"><option value="">Select</option><option>Major news expected</option><option>Minor news</option><option>No significant news</option><option>Unaware</option></select></div>
+                                                <div class="form-group"><label class="form-label">Overall Market Environment</label><select name="marketEnvironment" class="form-control"><option value="">Select</option><option>Strong Trend Up</option><option>Weak Trend Up</option><option>Sideways / Range</option><option>Weak Trend Down</option><option>Strong Trend Down</option></select></div>
+                                                <div class="form-group"><label class="form-label" title="Are you feeling Fear of Missing Out on this trade?">FOMO Level (1-10)</label><input type="range" name="fomoLevel" class="range-input" min="1" max="10" value="1"><div class="range-value">1</div></div>
+                                                <div class="form-group"><label class="form-label">Stress Level Before Trade (1-10)</label><input type="range" name="preStress" class="range-input" min="1" max="10" value="1"><div class="range-value">1</div></div>
+                                            </div>
+                                        </div>
+                                    </details>
 
-  analyzeTradingEdge() {
-    const best = this.bestStrategy();
-    const worstStrategies = Object.entries(this.trades.reduce((acc, t) => {
-      if (t.strategy) acc[t.strategy] = (acc[t.strategy] || 0) + t.netPL;
-      return acc;
-    }, {})).sort((a, b) => a[1] - b[1]);
-    let result = `<div class="suggestion-item suggestion-good">Your most profitable strategy is <strong>${best}</strong>. Focus on mastering it.</div>`;
-    if (worstStrategies.length > 0 && worstStrategies[0][1] < 0) {
-      result += `<div class="suggestion-item suggestion-warning">Your least profitable strategy is <strong>${worstStrategies[0][0]}</strong>. Consider avoiding or re-evaluating it.</div>`;
-    }
-    return result;
-  }
+                                    <details class="collapse-card">
+                                        <summary>Trade Setup Analysis</summary>
+                                        <div class="collapse-content">
+                                            <div class="form-grid">
+                                                <div class="form-group full-width"><label class="form-label">Multiple Time-Frame Confirmation</label>
+                                                    <div class="checkbox-group">
+                                                        <label><input type="checkbox" name="multiTimeframes" value="Daily aligned"> Daily aligned</label><br>
+                                                        <label><input type="checkbox" name="multiTimeframes" value="4H aligned"> 4H aligned</label><br>
+                                                        <label><input type="checkbox" name="multiTimeframes" value="1H aligned"> 1H aligned</label><br>
+                                                        <label><input type="checkbox" name="multiTimeframes" value="15min aligned"> 15min aligned</label>
+                                                    </div>
+                                                </div>
+                                                <div class="form-group"><label class="form-label">Volume Analysis</label><select name="volumeAnalysis" class="form-control"><option value="">Select</option><option>High volume</option><option>Average volume</option><option>Low volume</option><option>Volume spike</option><option>Volume dry-up</option></select></div>
+                                                <div class="form-group full-width"><label class="form-label">Technical Confluence Factors</label>
+                                                    <div class="checkbox-group">
+                                                        <label><input type="checkbox" name="technicalConfluence" value="Support / Resistance"> Support / Resistance</label><br>
+                                                        <label><input type="checkbox" name="technicalConfluence" value="Moving Average"> Moving Average</label><br>
+                                                        <label><input type="checkbox" name="technicalConfluence" value="Trendline"> Trendline</label><br>
+                                                        <label><input type="checkbox" name="technicalConfluence" value="Fibonacci"> Fibonacci</label><br>
+                                                        <label><input type="checkbox" name="technicalConfluence" value="Indicator signal"> Indicator signal</label><br>
+                                                        <label><input type="checkbox" name="technicalConfluence" value="Pattern completion"> Pattern completion</label>
+                                                    </div>
+                                                </div>
+                                                <div class="form-group"><label class="form-label">Market Session</label><select name="marketSession" class="form-control"><option value="">Select</option><option>Pre-market</option><option>Market Open (9:30-10:30)</option><option>Mid-morning (10:30-12:00)</option><option>Lunch (12:00-14:00)</option><option>Afternoon (14:00-15:30)</option><option>Market Close (15:30-16:00)</option><option>After-hours</option></select></div>
+                                                <div class="form-group"><label class="form-label">Trade Catalyst</label><select name="tradeCatalyst" class="form-control"><option value="">Select</option><option>Technical breakout</option><option>Earnings</option><option>News event</option><option>Sector rotation</option><option>Market reversal</option><option>Momentum follow-through</option><option>Other</option></select></div>
+                                            </div>
+                                        </div>
+                                    </details>
 
-  findRepeatLosingTrades() {
-    const losingTrades = this.trades.filter(t => t.netPL < 0);
-    const patternCount = {};
-    losingTrades.forEach(t => {
-      const pattern = `${t.symbol} on ${t.strategy}`;
-      if (t.strategy) {
-        patternCount[pattern] = (patternCount[pattern] || 0) + 1;
-      }
-    });
-    const recurringLosses = Object.entries(patternCount).filter(([, count]) => count > 1).sort((a, b) => b[1] - a[1]);
-    if (recurringLosses.length > 0) {
-      return `<div class="suggestion-item suggestion-warning">You have recurring losses with: <strong>${recurringLosses[0][0]}</strong> (${recurringLosses[0][1]} times). Analyze these trades to find the issue.</div>`;
-    }
-    return '<div class="suggestion-item suggestion-info">No significant recurring losing patterns detected. Good job diversifying your approach.</div>';
-  }
+                                    <details class="collapse-card">
+                                        <summary>During Trade Management</summary>
+                                        <div class="collapse-content">
+                                            <div class="form-grid">
+                                                <div class="form-group full-width"><label class="form-label">Did You Wait for Setup?</label>
+                                                    <div class="radio-group">
+                                                        <label><input type="radio" name="waitedForSetup" value="Yes, completely"> Yes, completely</label><br>
+                                                        <label><input type="checkbox" name="waitedForSetup" value="Partially"> Partially</label><br>
+                                                        <label><input type="checkbox" name="waitedForSetup" value="No, entered early"> No, entered early</label>
+                                                    </div>
+                                                </div>
+                                                <div class="form-group"><label class="form-label">Position Sizing Comfort (1-10)</label><input type="range" name="positionComfort" class="range-input" min="1" max="10" value="5"><div class="range-value">5</div></div>
+                                                <div class="form-group"><label class="form-label">Plan Deviation</label><select name="planDeviation" class="form-control"><option value="">Select</option><option>Stuck to plan completely</option><option>Minor deviation</option><option>Major deviation</option><option>Completely changed plan</option></select></div>
+                                                <div class="form-group"><label class="form-label">Stress During Trade (1-10)</label><input type="range" name="stressDuring" class="range-input" min="1" max="10" value="1"><div class="range-value">1</div></div>
+                                            </div>
+                                        </div>
+                                    </details>
 
-  analyzeEntries() {
-    const fomoTrades = this.trades.filter(t => t.fomoLevel > 5 && t.netPL < 0);
-    if (fomoTrades.length > 2) {
-      return `<div class="suggestion-item suggestion-warning">You've made ${fomoTrades.length} losing trades with high FOMO. Ensure you wait for your setup and avoid chasing the market.</div>`;
-    }
-    const earlyEntries = this.trades.filter(t => t.waitedForSetup === 'No, entered early' && t.netPL < 0);
-    if (earlyEntries.length > 2) {
-      return `<div class="suggestion-item suggestion-warning">You have ${earlyEntries.length} losing trades where you entered early. Practice patience and wait for confirmation.</div>`;
-    }
-    return '<div class="suggestion-item suggestion-good">Your entries appear disciplined. Keep waiting for your A+ setups.</div>';
-  }
+                                    <details class="collapse-card">
+                                        <summary>Exit Analysis</summary>
+                                        <div class="collapse-content">
+                                            <div class="form-grid">
+                                                <div class="form-group"><label class="form-label">Primary Exit Reason</label><select name="primaryExitReason" class="form-control"><option value="">Select</option><option>Target hit</option><option>Stop loss hit</option><option>Time-based exit</option><option>Manual profit taking</option><option>Fear-based exit</option><option>Greed-based hold too long</option><option>News/event exit</option><option>Technical signal change</option></select></div>
+                                                <div class="form-group"><label class="form-label">Exit Emotion</label><select name="exitEmotion" class="form-control"><option value="">Select</option><option>Satisfied</option><option>Regretful</option><option>Frustrated</option><option>Elated</option><option>Neutral</option><option>Disappointed</option><option>Relieved</option></select></div>
+                                                <div class="form-group full-width"><label class="form-label">Would Take Again?</label>
+                                                    <div class="radio-group">
+                                                        <label><input type="radio" name="wouldTakeAgain" value="Definitely yes"> Definitely yes</label><br>
+                                                        <label><input type="radio" name="wouldTakeAgain" value="Probably yes"> Probably yes</label><br>
+                                                        <label><input type="radio" name="wouldTakeAgain" value="Maybe"> Maybe</label><br>
+                                                        <label><input type="radio" name="wouldTakeAgain" value="Probably no"> Probably no</label><br>
+                                                        <label><input type="radio" name="wouldTakeAgain" value="Definitely no"> Definitely no</label>
+                                                    </div>
+                                                </div>
+                                                <div class="form-group full-width"><label class="form-label">Key Lesson Learned</label><textarea name="lesson" class="form-control" rows="3" placeholder="What's the main lesson from this trade?"></textarea></div>
+                                            </div>
+                                        </div>
+                                    </details>
 
-  analyzeEmotionalBias() {
-    const frustrationExits = this.trades.filter(t => t.exitEmotion === 'Frustrated' && t.netPL < 0);
-    if (frustrationExits.length > 2) {
-      return `<div class="suggestion-item suggestion-warning">You've exited ${frustrationExits.length} losing trades feeling frustrated. This can lead to revenge trading. Take a break after a loss.</div>`;
-    }
-    const fearExits = this.trades.filter(t => t.primaryExitReason === 'Fear-based exit');
-    if (fearExits.length > 2) {
-      const profitLeft = fearExits.reduce((sum, t) => {
-        if (t.netPL > 0 && t.targetPrice > t.exitPrice) return sum + (t.targetPrice - t.exitPrice) * t.quantity;
-        return sum;
-      }, 0);
-      return `<div class="suggestion-item suggestion-warning">You've exited ${fearExits.length} trades due to fear, potentially leaving ${this.formatCurrency(profitLeft)} on the table. Trust your plan.</div>`;
-    }
-    return '<div class="suggestion-item suggestion-info">Your emotional responses to trades seem balanced. Keep maintaining a neutral mindset.</div>';
-  }
+                                    <details class="collapse-card">
+                                        <summary>Market Context</summary>
+                                        <div class="collapse-content">
+                                            <div class="form-grid">
+                                                <div class="form-group"><label class="form-label">Market Volatility Today</label><select name="volatilityToday" class="form-control"><option value="">Select</option><option>Very high (VIX >30)</option><option>High (VIX 20-30)</option><option>Normal (VIX 15-20)</option><option>Low (VIX <15)</option></select></div>
+                                                <div class="form-group"><label class="form-label">Sector Performance</label><select name="sectorPerformance" class="form-control"><option value="">Select</option><option>Sector leading market</option><option>Sector in-line with market</option><option>Sector lagging market</option><option>Sector against market trend</option></select></div>
+                                                <div class="form-group full-width"><label class="form-label">Economic Events Today</label>
+                                                    <div class="checkbox-group">
+                                                        <label><input type="checkbox" name="economicEvents" value="Fed announcement"> Fed announcement</label><br>
+                                                        <label><input type="checkbox" name="economicEvents" value="Earnings"> Earnings</label><br>
+                                                        <label><input type="checkbox" name="economicEvents" value="Economic data"> Economic data</label><br>
+                                                        <label><input type="checkbox" name="economicEvents" value="Geopolitical news"> Geopolitical news</label><br>
+                                                        <label><input type="checkbox" name="economicEvents" value="None"> None</label>
+                                                    </div>
+                                                </div>
+                                                <div class="form-group full-width"><label class="form-label">Personal Distractions</label>
+                                                    <div class="checkbox-group">
+                                                        <label><input type="checkbox" name="personalDistractions" value="Work stress"> Work stress</label><br>
+                                                        <label><input type="checkbox" name="personalDistractions" value="Personal issues"> Personal issues</label><br>
+                                                        <label><input type="checkbox" name="personalDistractions" value="Health concerns"> Health concerns</label><br>
+                                                        <label><input type="checkbox" name="personalDistractions" value="Time pressure"> Time pressure</label><br>
+                                                        <label><input type="checkbox" name="personalDistractions" value="None"> None</label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </details>
+                                    <div class="calculated-fields">
+                                        <h4>Calculated Values</h4>
+                                        <div class="calc-grid">
+                                            <div class="calc-item"><span class="calc-label">Gross P&L:</span><span class="calc-value" id="calcGrossPL">₹0</span></div>
+                                            <div class="calc-item"><span class="calc-label">Net P&L:</span><span class="calc-value" id="calcNetPL">₹0</span></div>
+                                            <div class="calc-item"><span class="calc-label">Risk:Reward:</span><span class="calc-value" id="calcRiskReward">1:0</span></div>
+                                            <div class="calc-item"><span class="calc-label">Capital Risk %:</span><span class="calc-value" id="calcCapitalRisk">0%</span></div>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="card__footer add-trade-footer"><button type="button" class="btn btn--outline" id="resetTradeForm">Reset</button><button type="submit" form="addTradeForm" class="btn btn--primary">Save Trade</button></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
 
-  calculateSetupQuality() {
-    const highQualityTrades = this.trades.filter(t => t.technicalConfluence && t.technicalConfluence.length >= 3);
-    if (highQualityTrades.length === 0) return '<div class="empty-state">Not enough data on setup quality.</div>';
-    const stats = this.calculateStatsForTrades(highQualityTrades);
-    return `<div class="suggestion-item suggestion-info">For trades with 3+ confluence factors, your win rate is <strong>${stats.winRate}%</strong> with a P&L of <strong>${this.formatCurrency(stats.totalPL)}</strong>. Prioritize these high-quality setups.</div>`;
-  }
+            <section id="history" class="section"><div class="container"><div class="section-header"><h1>Trade History</h1><div class="filter-controls"><select id="symbolFilter" class="form-control" style="width: 150px;"><option value="">All Symbols</option></select><select id="strategyFilter" class="form-control" style="width: 150px;"><option value="">All Strategies</option></select></div></div><div id="historyContent"><div class="loading">Loading trade history...</div></div></div></section>
 
-  analyzeTimeBasedConfidence() {
-    const morningTrades = this.trades.filter(t => t.marketSession === 'Market Open (9:30-10:30)');
-    if (morningTrades.length < 3) return '<div class="empty-state">Not enough trades during market open to analyze.</div>';
-    const stats = this.calculateStatsForTrades(morningTrades);
-    let suggestion = '';
-    if (stats.totalPL > 0) {
-      suggestion = `<div class="suggestion-item suggestion-good">You perform well during the market open, with a P&L of <strong>${this.formatCurrency(stats.totalPL)}</strong>. This might be your golden hour.</div>`;
-    } else {
-      suggestion = `<div class="suggestion-item suggestion-warning">You seem to struggle during the market open, with a P&L of <strong>${this.formatCurrency(stats.totalPL)}</strong>. This period is volatile; consider trading smaller or waiting for the market to settle.</div>`;
-    }
-    return suggestion;
-  }
+            <section id="news" class="section">
+                <div class="container">
+                    <div class="section-header">
+                        <h1>Market News</h1>
+                        <p>Stay updated with the latest market information</p>
+                    </div>
 
-  calculateStatsForTrades(trades) {
-    if (trades.length === 0) {
-      return { totalPL: 0, winRate: 0, totalTrades: 0, bestTrade: 0, worstTrade: 0 };
-    }
-    const totalPL = trades.reduce((sum, t) => sum + (t.netPL || 0), 0);
-    const wins = trades.filter(t => t.netPL > 0).length;
-    const winRate = trades.length > 0 ? Math.round((wins / trades.length) * 100) : 0;
-    const bestTrade = Math.max(0, ...this.trades.map(t => t.netPL));
-    const worstTrade = Math.min(0, ...this.trades.map(t => t.netPL));
-    return { totalPL, winRate, totalTrades: trades.length, bestTrade, worstTrade };
-  }
-  
-  // --- START: AI CHAT METHODS ---
-  async handleSendMessage() {
-    const chatInput = document.getElementById('aiChatInput');
-    const question = chatInput.value.trim();
-    if (!question) return;
+                    <!-- Container for the News Widget. The script is now loaded dynamically by app.js -->
+                    <div id="news-widget-container" class="tradingview-widget-container" style="height: calc(100vh - 180px);"></div>
 
-    this.addChatMessage(question, 'user');
-    chatInput.value = '';
-    this.showTypingIndicator(true);
+                </div>
+            </section>
 
-    const trades = this.allTrades.slice(0, 20);
-    const psychology = this.allConfidence.slice(0, 20);
+            <section id="analytics" class="section">
+                <div class="container">
+                    <div class="section-header"><h1>Analytics & Performance</h1></div>
+                    <div class="analytics-summary"><div class="summary-card card"><div class="card__body"><h3>Performance Summary</h3><div class="summary-stats"><div class="summary-item"><span class="label">Total Trades:</span><span class="value" id="analyticsTotalTrades">0</span></div><div class="summary-item"><span class="label">Win Rate:</span><span class="value" id="analyticsWinRate">0%</span></div><div class="summary-item"><span class="label">Net P&L:</span><span class="value" id="analyticsNetPL">₹0</span></div><div class="summary-item"><span class="label">Best Trade:</span><span class="value" id="analyticsBestTrade">₹0</span></div><div class="summary-item"><span class="label">Worst Trade:</span><span class="value" id="analyticsWorstTrade">₹0</span></div><div class="summary-item"><span class="label">Avg Risk:Reward:</span><span class="value" id="analyticsAvgRR">1:0</span></div></div></div></div></div>
+                    <div class="charts-grid">
+                        <div class="chart-container" style="position: relative; height: 400px;"><h3>P&L Curve Over Time</h3><canvas id="plChart"></canvas></div>
+                        <div class="chart-container" style="position: relative; height: 400px;"><h3>Risk-Reward Distribution</h3><canvas id="rrChart"></canvas></div>
+                        <div class="chart-container" style="position: relative; height: 400px;"><h3>Strategy Performance</h3><canvas id="strategyChart"></canvas></div>
+                        <div class="chart-container" style="position: relative; height: 400px;"><h3>Time-Based Analysis</h3><canvas id="timeChart"></canvas></div>
+                    </div>
+                </div>
+            </section>
 
-    try {
-      const response = await fetch('/.netlify/functions/ask-ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, trades, psychology })
-      });
+            <section id="ai-suggestions" class="section">
+                <div class="container">
+                    <div class="section-header"><h1>🧠 AI Suggestions</h1><p>Personalized insights and recommendations based on your trading data</p></div>
+                    <div class="smart-suggestion-banner card"><div class="card__body"><div class="smart-suggestion-content"><h3>💡 Smart Trading Insight</h3><div id="smartInsight" class="smart-suggestion-text">Analyzing your trading patterns...</div></div></div></div>
+                    <div class="suggestions-grid"><div class="suggestion-card card"><div class="card__header"><h3>🧠 AI-Based Trade Feedback</h3></div><div class="card__body"><div id="aiFeedback" class="suggestion-content">Loading feedback analysis...</div></div></div><div class="suggestion-card card"><div class="card__header"><h3>📊 Personal Trading Edge Analyzer</h3></div><div class="card__body"><div id="edgeAnalyzer" class="suggestion-content">Calculating your trading edge...</div></div></div><div class="suggestion-card card"><div class="card__header"><h3>📊 Daily Confidence Analysis</h3></div><div class="card__body"><div id="confidenceAnalysis" class="suggestion-content">Analyzing confidence patterns...</div><div class="chart-container" style="position: relative; height: 300px; margin-top: 16px;"><canvas id="confidenceChart"></canvas></div></div></div><div class="suggestion-card card"><div class="card__header"><h3>🔄 Repeat Trade Detection</h3></div><div class="card__body"><div id="repeatTrades" class="suggestion-content">Analyzing for recurring patterns...</div></div></div><div class="suggestion-card card"><div class="card__header"><h3>🎯 Smart Entry Suggestions</h3></div><div class="card__body"><div id="entryAnalysis" class="suggestion-content">Analyzing entry patterns...</div></div></div><div class="suggestion-card card"><div class="card__header"><h3>🧘‍♂️ Emotional Bias Tracker</h3></div><div class="card__body"><div id="emotionalBias" class="suggestion-content">Tracking emotional patterns...</div></div></div><div class="suggestion-card card"><div class="card__header"><h3>⭐ Setup Quality Score</h3></div><div class="card__body"><div id="setupQuality" class="suggestion-content">Evaluating setup quality...</div></div></div><div class="suggestion-card card"><div class="card__header"><h3>⏰ Time-Based Confidence Score</h3></div><div class="card__body"><div id="timeConfidence" class="suggestion-content">Analyzing time-based performance...</div></div></div></div>
+                </div>
+            </section>
 
-      if (!response.ok) throw new Error(`Server error: ${response.status}`);
+            <section id="reports" class="section">
+                <div class="container">
+                    <div class="section-header"><h1>Reports & Calendar</h1><button class="btn btn--primary" id="exportData">Export to CSV</button></div>
+                    <div class="calendar-section card"><div class="card__header"><h3>P&L Calendar</h3><div class="calendar-nav"><button class="btn btn--outline btn--sm" id="prevMonth">‹</button><span id="currentMonth">July 2025</span><button class="btn btn--outline btn--sm" id="nextMonth">›</button></div></div><div class="card__body"><div id="plCalendar" class="pl-calendar"></div><div class="calendar-legend"><div class="legend-item"><div class="legend-color profit-high"></div><span>High Profit (>₹1000)</span></div><div class="legend-item"><div class="legend-color profit-low"></div><span>Profit</span></div><div class="legend-item"><div class="legend-color no-trades"></div><span>No Trades</span></div><div class="legend-item"><div class="legend-color loss-low"></div><span>Loss</span></div><div class="legend-item"><div class="legend-color loss-high"></div><span>High Loss (<-₹1000)</span></div></div></div></div>
+                    <div class="reports-grid"><div class="report-card card"><div class="card__body"><h3>Weekly Summary</h3><div id="weeklyReport"><div class="loading">Generating weekly report...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Monthly Analysis</h3><div id="monthlyReport"><div class="loading">Generating monthly report...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Strategy Performance</h3><div id="strategyReport"><div class="loading">Analyzing strategies...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Emotional Patterns</h3><div id="emotionalReport"><div class="loading">Analyzing emotional patterns...</div></div></div></div></div>
+                </div>
+            </section>
+        </main>
+        <div id="tradeModal" class="modal hidden"><div class="modal-content"><div class="modal-header"><h2>Trade Details</h2><button class="modal-close" onclick="app.hideTradeModal()">&times;</button></div><div class="modal-body" id="tradeModalBody"></div><div class="modal-footer"><button class="btn btn--outline" onclick="app.hideTradeModal()">Close</button><button class="btn btn--primary" id="editTradeBtn">Edit Trade</button></div></div></div>
+    </div>
+    <!-- ======================================================= -->
+    <!-- CHAT WIDGET                                             -->
+    <!-- ======================================================= -->
+    <div id="aiChatWidget" class="chat-widget hidden">
+        <!-- Chat Window -->
+        <div id="aiChatWindow" class="chat-window hidden">
+            <div class="chat-header">
+                <h3>AI Journal Assistant</h3>
+                <button id="closeChatBtn" class="chat-close-btn">&times;</button>
+            </div>
+            <div id="aiChatMessages" class="chat-messages">
+                <div class="chat-message ai-message">
+                    Hello! How can I help you reflect today?
+                </div>
+            </div>
+            <div class="chat-input-container">
+                <input type="text" id="aiChatInput" placeholder="Ask about your trades...">
+                <button id="sendChatBtn" class="chat-send-btn">➤</button>
+            </div>
+        </div>
+        <!-- Chat Bubble -->
+        <div id="aiChatBubble" class="chat-bubble">
+            🧠
+        </div>
+    </div>
+    <div id="toastContainer" class="toast-container"></div>
+    <div id="calendarTooltip" class="calendar-tooltip"></div>
 
-      const data = await response.json();
-      this.addChatMessage(data.reply, 'ai');
-
-    } catch (error) {
-      console.error("Error fetching AI response:", error);
-      this.addChatMessage("Sorry, I'm having trouble connecting. Please try again.", 'ai');
-    } finally {
-      this.showTypingIndicator(false);
-    }
-  }
-
-  addChatMessage(text, sender) {
-    const messagesContainer = document.getElementById('aiChatMessages');
-    const messageElement = document.createElement('div');
-    messageElement.className = `chat-message ${sender}-message`;
-
-    if (sender === 'ai') {
-      let html = text
-        .replace(/### (.*)/g, '<h3>$1</h3>')
-        .replace(/^- (.*)/gm, '<li>$1</li>')
-        .replace(/\n\n/g, '<br><br>');
-      if (html.includes('<li>')) {
-        html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
-      }
-      messageElement.innerHTML = html;
-    } else {
-      messageElement.textContent = text;
-    }
-
-    messagesContainer.appendChild(messageElement);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-  }
-
-  showTypingIndicator(show) {
-    const messagesContainer = document.getElementById('aiChatMessages');
-    let indicator = document.getElementById('typing-indicator');
-
-    if (show) {
-      if (!indicator) {
-        indicator = document.createElement('div');
-        indicator.id = 'typing-indicator';
-        indicator.className = 'typing-indicator';
-        indicator.innerHTML = `<span></span><span></span><span></span>`;
-        messagesContainer.appendChild(indicator);
-      }
-    } else {
-      if (indicator) indicator.remove();
-    }
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-  }
-  // --- END: AI CHAT METHODS ---
-
-  // --- START: NEW DASHBOARD CALENDAR METHOD ---
-  buildDashboardCalendar() {
-    const date = this.currentCalendarDate;
-    const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-    const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-
-    document.getElementById('dashCurrentMonth').textContent = monthStart.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
-    const cal = document.getElementById('dashPlCalendar');
-    if (!cal) return;
-    cal.innerHTML = '';
-
-    ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach(d => {
-        const headerEl = document.createElement('div');
-        headerEl.className = 'calendar-day header';
-        headerEl.textContent = d;
-        cal.appendChild(headerEl);
-    });
-
-    for (let i = 0; i < monthStart.getDay(); i++) {
-        const spacerEl = document.createElement('div');
-        spacerEl.className = 'calendar-day no-trades';
-        cal.appendChild(spacerEl);
-    }
-
-    for (let d = 1; d <= monthEnd.getDate(); d++) {
-        const dayEl = document.createElement('div');
-        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-        const tradesOnDay = this.trades.filter(t => t.entryDate && t.entryDate.startsWith(key));
-        
-        let cls = 'no-trades';
-        if (tradesOnDay.length > 0) {
-            const pl = tradesOnDay.reduce((sum, t) => sum + t.netPL, 0);
-            if (pl > 1000) cls = 'profit-high';
-            else if (pl > 0) cls = 'profit-low';
-            else if (pl < -1000) cls = 'loss-high';
-            else if (pl < 0) cls = 'loss-low';
-            else cls = 'profit-low';
-
-            dayEl.addEventListener('mouseenter', (e) => this.showCalendarTooltip(e, tradesOnDay, key));
-            dayEl.addEventListener('mousemove', (e) => this.updateTooltipPosition(e));
-            dayEl.addEventListener('mouseleave', () => this.hideCalendarTooltip());
-        }
-        
-        dayEl.className = `calendar-day ${cls}`;
-        dayEl.textContent = d;
-        cal.appendChild(dayEl);
-    }
-  }
-  // --- END: NEW DASHBOARD CALENDAR METHOD ---
-  
-  /* ------------------------ EXPORT ------------------------------------- */
-  exportCSV() {
-    if (this.trades.length===0) { this.showToast('No trades to export','warning'); return; }
-    const header = Object.keys(this.trades[0]).join(',');
-    const rows = this.trades.map(t => Object.values(t).map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
-    const csv = [header, ...rows].join('\n');
-    const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'trading_journal_data.csv'; a.click();
-    URL.revokeObjectURL(url);
-  }
-}
-
-// Initialize the app
-window.app = new TradingJournalApp();
+    <script src="app.js"></script>
+</body>
+</html>
