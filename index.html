@@ -513,6 +513,26 @@
     </div>
     <div id="toastContainer" class="toast-container"></div>
     <div id="calendarTooltip" class="calendar-tooltip"></div>
+    <!-- START: Add this new modal for expired subscriptions -->
+<div id="expiredModal" class="modal hidden">
+    <div class="modal-content" style="max-width: 450px;">
+        <div class="modal-header">
+            <h2>Subscription Required</h2>
+        </div>
+        <div class="modal-body" style="text-align: center;">
+            <div style="font-size: 48px; color: var(--color-warning); margin-bottom: 16px;">⚠️</div>
+            <p id="expiredModalMessage" style="font-size: 1.1rem; color: var(--color-text-secondary); line-height: 1.6;">
+                Your free trial has ended. Please subscribe to continue using TraderLog.
+            </p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn--primary btn--full-width" id="redirectToPaymentBtn">
+                Go to Subscription Page
+            </button>
+        </div>
+    </div>
+</div>
+<!-- END: New modal -->
 
     <script src="app.js"></script>
 </body>
