@@ -1,21 +1,40 @@
+// START: Add this new code at the top of the file
+// --- Import Firebase 9+ modular SDKs ---
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, setDoc, addDoc, query, orderBy, getDocs, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
+// END: New code
 // Trading Journal Application - Integrated with Firebase
 class TradingJournalApp {
   constructor() {
     // --- FIREBASE SETUP ---
-    const firebaseConfig = {
-      apiKey: "AIzaSyCcbykkhvTw671DG1EaAj7Tw9neQcXJjS0",
-      authDomain: "trad-77851.firebaseapp.com",
-      projectId: "trad-77851",
-      storageBucket: "trad-77851.appspot.com",
-      messagingSenderId: "1099300399869",
-      appId: "1:1099300399869:web:d201028b9168d24feb2c94",
-      measurementId: "G-9TV0H4BWN6"
-    };
+const firebaseConfig = {
+  apiKey: "AIzaSyCcbykkhvTw671DG1EaAj7Tw9neQcXJjS0",
+  authDomain: "trad-77851.firebaseapp.com",
+  projectId: "trad-77851",
+  storageBucket: "trad-77851.appspot.com",
+  messagingSenderId: "1099300399869",
+  appId: "1:1099300399869:web:d201028b9168d24feb2c94",
+  measurementId: "G-9TV0H4BWN6"
+};
 
-    // Initialize Firebase
-    firebase.initializeApp(firebaseConfig);
-    this.auth = firebase.auth();
-    this.db = firebase.firestore();
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+this.auth = firebase.auth();
+this.db = firebase.firestore();
+    // ... (code above) ...
+
+    // --- APP STATE ---
+    this.currentUser = null; // <--- After this line...
+
+    // START: Add this new code
+    // --- REQUIRED REDIRECT URL ---
+    this.subscriptionWebsiteURL = "https://traderlog6.netlify.app/rpp1";
+    // END: New code
+
+    this.allTrades = []; // <--- ...and before this line.
+    this.allConfidence = [];
+    // ...
 
     // --- APP STATE ---
     this.currentUser = null;
@@ -46,25 +65,92 @@ class TradingJournalApp {
   /* ------------------------------- AUTH ---------------------------------- */
 
   handleAuthStateChange() {
-    this.auth.onAuthStateChanged(async (user) => {
-      if (user) {
+  // START: Replace your old handleAuthStateChange method with this one
+async handleAuthStateChange() {
+    onAuthStateChanged(this.auth, async (user) => {
+        // Step 1: Check if the user is logged in at all
+        if (!user) {
+            console.log("[AUTH] No user logged in. Showing this site's login screen.");
+            this.showAuthScreen();
+            return;
+        }
+
         console.log('[AUTH] User is signed in:', user.uid);
         this.currentUser = user;
-        await this.loadUserData();
-        this.showMainApp();
-        document.getElementById('aiChatWidget')?.classList.remove('hidden');
-      } else {
-        console.log('[AUTH] User is signed out.');
-        this.currentUser = null;
-        this.allTrades = [];
-        this.allConfidence = [];
-        this.allNotes = [];
-        Object.values(this.charts).forEach(chart => chart?.destroy());
-        this.charts = {};
-        this.showAuthScreen();
-        document.getElementById('aiChatWidget')?.classList.add('hidden');
-      }
+
+        // Step 2: Get the user's subscription data from Firestore
+        const userRef = doc(this.db, "users", user.uid);
+        const userDoc = await getDoc(userRef);
+
+        if (!userDoc.exists()) {
+            console.error("[AUTH] User document not found! Redirecting to payment page.");
+            window.location.href = this.subscriptionWebsiteURL;
+            return;
+        }
+
+        const userData = userDoc.data();
+        let status = userData.subscription_status;
+        const now = new Date();
+        let hasAccess = false;
+
+        // Step 3: The Core Access Logic
+        if (status === 'active') {
+            hasAccess = true;
+        }
+        else if (status === 'trialing') {
+            const trialEndsAt = userData.trial_ends_at.toDate();
+            if (now < trialEndsAt) {
+                hasAccess = true; // Trial is still active
+            } else {
+                console.log("[AUTH] Trial has expired. Updating status to 'expired'.");
+                await updateDoc(userRef, { subscription_status: 'expired' });
+                status = 'expired'; // Update status for the next check
+                hasAccess = false;
+            }
+        }
+
+        // Step 4: Grant or Deny Access
+        if (hasAccess) {
+            console.log("Access Granted. ✅ User status:", status);
+            await this.loadUserData();
+            this.showMainApp();
+            document.getElementById('aiChatWidget')?.classList.remove('hidden');
+        } else {
+            console.log("Access Denied. ❌ User status:", status);
+            let message = "Your free trial has ended. Please subscribe to continue using TraderLog.";
+            if (status === 'expired_subscription') {
+                message = "Your subscription has expired. Please renew to regain access.";
+            }
+            this.showExpiredModal(message);
+        }
     });
+}
+    // START: Add this new method
+// --- NEW METHOD TO SHOW THE EXPIRED MODAL ---
+showExpiredModal(message) {
+    const modal = document.getElementById('expiredModal');
+    const modalMessage = document.getElementById('expiredModalMessage');
+    const redirectBtn = document.getElementById('redirectToPaymentBtn');
+
+    if (modalMessage) {
+        modalMessage.textContent = message;
+    }
+
+    if (redirectBtn) {
+        redirectBtn.onclick = () => {
+            window.location.href = this.subscriptionWebsiteURL;
+        };
+    }
+
+    if (modal) {
+        modal.classList.remove('hidden');
+    }
+    // Ensure the rest of the app is hidden
+    document.getElementById('authScreen').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'none';
+}
+// END: New method
+// END: Replacement code
   }
 
   setupAuthListeners() {
