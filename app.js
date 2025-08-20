@@ -1,7 +1,7 @@
-// Trading Journal Application - Integrated with Firebase (Corrected Version)
+// Trading Journal Application - Integrated with Firebase
 class TradingJournalApp {
   constructor() {
-    // --- FIREBASE SETUP (Original v8 Syntax) ---
+    // --- FIREBASE SETUP ---
     const firebaseConfig = {
       apiKey: "AIzaSyCcbykkhvTw671DG1EaAj7Tw9neQcXJjS0",
       authDomain: "trad-77851.firebaseapp.com",
@@ -19,19 +19,16 @@ class TradingJournalApp {
 
     // --- APP STATE ---
     this.currentUser = null;
-
-    // --- START: ADDED REDIRECT URL ---
-    this.subscriptionWebsiteURL = "https://traderlog6.netlify.app/rpp1";
-    // --- END: ADDED REDIRECT URL ---
-
     this.allTrades = [];
     this.allConfidence = [];
     this.allNotes = [];
+    this.allRules = []; // <-- NEW: For Rulebook
     this.currentEditingNoteId = null; 
+    this.currentEditingRuleId = null; // <-- NEW: For Rulebook
     this.charts = {};
     this.mainListenersAttached = false;
     this.currentCalendarDate = new Date();
-    this.currencySymbol = '₹'; 
+    this.currencySymbol = '₹'; // Default to INR
     this.tickerWidgetLoaded = false;
     this.chartsWidgetLoaded = false;
 
@@ -45,95 +42,32 @@ class TradingJournalApp {
 
   bootstrap() {
     this.setupAuthListeners();
-    this.handleAuthStateChange(); // This is our main gatekeeper
+    this.handleAuthStateChange();
   }
 
-  /* ------------------------------- AUTH (GATEKEEPER) ---------------------------------- */
+  /* ------------------------------- AUTH ---------------------------------- */
 
-  // THIS IS THE CORRECTED GATEKEEPER METHOD USING YOUR ORIGINAL FIREBASE VERSION
   handleAuthStateChange() {
     this.auth.onAuthStateChanged(async (user) => {
-        // Step 1: Check if the user is logged in at all
-        if (!user) {
-            console.log("[AUTH] No user logged in. Showing this site's login screen.");
-            this.showAuthScreen();
-            return;
-        }
-
+      if (user) {
         console.log('[AUTH] User is signed in:', user.uid);
         this.currentUser = user;
-
-        // Step 2: Get the user's subscription data from Firestore
-        const userRef = this.db.collection("users").doc(user.uid);
-        const userDoc = await userRef.get();
-
-        if (!userDoc.exists) {
-            console.error("[AUTH] User document not found! Redirecting to payment page.");
-            window.location.href = this.subscriptionWebsiteURL;
-            return;
-        }
-
-        const userData = userDoc.data();
-        let status = userData.subscription_status;
-        const now = new Date();
-        let hasAccess = false;
-
-        // Step 3: The Core Access Logic
-        if (status === 'active') {
-            // This is a paying user.
-            hasAccess = true;
-        }
-        else if (status === 'trialing') {
-            const trialEndsAt = userData.trial_ends_at.toDate(); // Convert Firestore Timestamp
-            if (now < trialEndsAt) {
-                hasAccess = true; // Trial is still active
-            } else {
-                console.log("[AUTH] Trial has expired. Updating status to 'expired'.");
-                await userRef.update({ subscription_status: 'expired' });
-                status = 'expired'; // Update status for the next check
-                hasAccess = false;
-            }
-        }
-
-        // Step 4: Grant or Deny Access
-        if (hasAccess) {
-            console.log("Access Granted. ✅ User status:", status);
-            await this.loadUserData();
-            this.showMainApp();
-            document.getElementById('aiChatWidget')?.classList.remove('hidden');
-        } else {
-            console.log("Access Denied. ❌ User status:", status);
-            let message = "Your free trial has ended. Please subscribe to continue using TraderLog.";
-            if (status === 'expired_subscription') { // For future use
-                message = "Your subscription has expired. Please renew to regain access.";
-            }
-            this.showExpiredModal(message);
-        }
+        await this.loadUserData();
+        this.showMainApp();
+        document.getElementById('aiChatWidget')?.classList.remove('hidden');
+      } else {
+        console.log('[AUTH] User is signed out.');
+        this.currentUser = null;
+        this.allTrades = [];
+        this.allConfidence = [];
+        this.allNotes = [];
+        this.allRules = []; // <-- NEW: Clear rules on logout
+        Object.values(this.charts).forEach(chart => chart?.destroy());
+        this.charts = {};
+        this.showAuthScreen();
+        document.getElementById('aiChatWidget')?.classList.add('hidden');
+      }
     });
-  }
-  
-  // --- NEW METHOD TO SHOW THE EXPIRED MODAL ---
-  showExpiredModal(message) {
-      const modal = document.getElementById('expiredModal');
-      const modalMessage = document.getElementById('expiredModalMessage');
-      const redirectBtn = document.getElementById('redirectToPaymentBtn');
-
-      if (modalMessage) {
-          modalMessage.textContent = message;
-      }
-
-      if (redirectBtn) {
-          redirectBtn.onclick = () => {
-              window.location.href = this.subscriptionWebsiteURL;
-          };
-      }
-
-      if (modal) {
-          modal.classList.remove('hidden');
-      }
-      // Ensure the rest of the app is hidden
-      document.getElementById('authScreen').style.display = 'none';
-      document.getElementById('mainApp').style.display = 'none';
   }
 
   setupAuthListeners() {
@@ -246,32 +180,37 @@ class TradingJournalApp {
     const tradesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('trades').orderBy('entryDate', 'desc').get();
     const confidenceQuery = this.db.collection('users').doc(this.currentUser.uid).collection('confidence').orderBy('date', 'desc').get();
     const notesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('notes').orderBy('date', 'desc').get();
+    const rulesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('rules').orderBy('createdAt', 'asc').get(); // <-- NEW: Rulebook query
+    
     try {
-      const [tradesSnapshot, confidenceSnapshot, notesSnapshot] = await Promise.all([tradesQuery, confidenceQuery, notesQuery]);
+      const [tradesSnapshot, confidenceSnapshot, notesSnapshot, rulesSnapshot] = await Promise.all([tradesQuery, confidenceQuery, notesQuery, rulesQuery]);
       this.allTrades = tradesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       console.log(`[DATA] Loaded ${this.allTrades.length} trades.`);
       this.allConfidence = confidenceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       console.log(`[DATA] Loaded ${this.allConfidence.length} confidence entries.`);
       this.allNotes = notesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       console.log(`[DATA] Loaded ${this.allNotes.length} notes.`);
+      this.allRules = rulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); // <-- NEW: Load rules
+      console.log(`[DATA] Loaded ${this.allRules.length} rules.`);
     } catch (error) {
       console.error("[DATA] Error loading user data:", error);
       this.showToast(`Error loading data: ${error.message}`, 'error');
       this.allTrades = [];
       this.allConfidence = [];
       this.allNotes = [];
+      this.allRules = [];
     }
   }
 
   /* ------------------------------ VIEW --------------------------------- */
   showAuthScreen() {
     document.getElementById('authScreen').style.display = 'flex';
-    document.getElementById('mainApp').style.display = 'none';
+    document.getElementById('mainApp').classList.add('hidden');
   }
 
   showMainApp() {
     document.getElementById('authScreen').style.display = 'none';
-    document.getElementById('mainApp').style.display = 'block';
+    document.getElementById('mainApp').classList.remove('hidden');
     if (!this.mainListenersAttached) {
       this.attachMainListeners();
       this.mainListenersAttached = true;
@@ -292,9 +231,12 @@ class TradingJournalApp {
         document.dispatchEvent(new CustomEvent('data-changed'));
     });
     document.getElementById('quickAddTrade').addEventListener('click', () => this.showSection('add-trade'));
+    document.getElementById('myRulebookBtn').addEventListener('click', () => this.showSection('rulebook')); // <-- NEW
+    document.getElementById('addRuleBtn').addEventListener('click', () => this.showRuleModal()); // <-- NEW
+    document.getElementById('saveRuleBtn').addEventListener('click', () => this.saveRule()); // <-- NEW
     document.getElementById('saveConfidenceBtn').addEventListener('click', () => this.saveDailyConfidence());
     document.getElementById('saveNoteBtn').addEventListener('click', () => this.saveNote());
-    document.getElementById('saveNoteChangesBtn').addEventListener('click', () => this.saveNoteChanges()); // Listener for modal save
+    document.getElementById('saveNoteChangesBtn').addEventListener('click', () => this.saveNoteChanges());
     this.setupAddTradeForm();
     document.getElementById('exportData').addEventListener('click', () => this.exportCSV());
     document.getElementById('prevMonth').addEventListener('click', () => this.changeCalendarMonth(-1));
@@ -401,6 +343,7 @@ class TradingJournalApp {
       case 'ai-suggestions': this.renderAISuggestions(); break;
       case 'reports': this.renderReports(); break;
       case 'charts': this.renderCharts(); break;
+      case 'rulebook': this.renderRulebook(); break; // <-- NEW
     }
   }
 
@@ -648,6 +591,98 @@ class TradingJournalApp {
         console.error("[DATA] Error updating note:", error);
     }
   }
+  
+  /* ----------------------- RULEBOOK SECTION (NEW) --------------------- */
+  renderRulebook() {
+    const container = document.getElementById('rulebookList');
+    if (this.allRules.length === 0) {
+        container.innerHTML = '<div class="empty-state">You have not added any rules yet. Click "Add New Rule" to start.</div>';
+        return;
+    }
+
+    container.innerHTML = this.allRules.map(rule => `
+        <div class="rule-item">
+            <p class="rule-content">${rule.content.replace(/\n/g, '<br>')}</p>
+            <div class="rule-actions">
+                <button class="btn btn--outline btn--sm" onclick="app.showRuleModal('${rule.id}')">Edit</button>
+                <button class="btn btn--danger btn--sm" onclick="app.deleteRule('${rule.id}')">Delete</button>
+            </div>
+        </div>
+    `).join('');
+  }
+
+  showRuleModal(ruleId = null) {
+      const modal = document.getElementById('ruleModal');
+      const title = document.getElementById('ruleModalTitle');
+      const content = document.getElementById('ruleContent');
+      const form = document.getElementById('ruleForm');
+      form.reset();
+
+      if (ruleId) {
+          const rule = this.allRules.find(r => r.id === ruleId);
+          if (rule) {
+              this.currentEditingRuleId = ruleId;
+              title.textContent = 'Edit Rule';
+              content.value = rule.content;
+          }
+      } else {
+          this.currentEditingRuleId = null;
+          title.textContent = 'Add New Rule';
+      }
+      modal.classList.remove('hidden');
+  }
+
+  hideRuleModal() {
+      document.getElementById('ruleModal').classList.add('hidden');
+      this.currentEditingRuleId = null;
+  }
+
+  async saveRule() {
+      const content = document.getElementById('ruleContent').value.trim();
+      if (!content) {
+          this.showToast('Rule content cannot be empty.', 'warning');
+          return;
+      }
+
+      try {
+          if (this.currentEditingRuleId) {
+              // Update existing rule
+              await this.db.collection('users').doc(this.currentUser.uid).collection('rules').doc(this.currentEditingRuleId).update({
+                  content: content
+              });
+              const ruleIndex = this.allRules.findIndex(r => r.id === this.currentEditingRuleId);
+              this.allRules[ruleIndex].content = content;
+              this.showToast('Rule updated successfully!', 'success');
+          } else {
+              // Add new rule
+              const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('rules').add({
+                  content: content,
+                  createdAt: firebase.firestore.FieldValue.serverTimestamp()
+              });
+              this.allRules.push({ id: docRef.id, content: content });
+              this.showToast('Rule added successfully!', 'success');
+          }
+          this.hideRuleModal();
+          document.dispatchEvent(new CustomEvent('data-changed'));
+      } catch (error) {
+          this.showToast(`Error saving rule: ${error.message}`, 'error');
+          console.error('[DATA] Error saving rule:', error);
+      }
+  }
+
+  async deleteRule(ruleId) {
+      if (!confirm('Are you sure you want to delete this rule?')) return;
+
+      try {
+          await this.db.collection('users').doc(this.currentUser.uid).collection('rules').doc(ruleId).delete();
+          this.allRules = this.allRules.filter(r => r.id !== ruleId);
+          this.showToast('Rule deleted.', 'info');
+          document.dispatchEvent(new CustomEvent('data-changed'));
+      } catch (error) {
+          this.showToast(`Error deleting rule: ${error.message}`, 'error');
+          console.error('[DATA] Error deleting rule:', error);
+      }
+  }
 
   /* ----------------------- ADD TRADE FORM ------------------------------ */
   renderAddTrade() {
@@ -656,6 +691,18 @@ class TradingJournalApp {
     const exitDateEl = document.querySelector('input[name="exitDate"]');
     if (entryDateEl) entryDateEl.value = now.toISOString().slice(0, 16);
     if (exitDateEl) exitDateEl.value = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 16);
+
+    // <-- NEW: Populate Rulebook Checklist -->
+    const checklistContainer = document.getElementById('rulebookChecklist');
+    if (this.allRules.length > 0) {
+        checklistContainer.innerHTML = this.allRules.map(rule => `
+            <label>
+                <input type="checkbox" name="followedRules" value="${rule.id}"> ${rule.content}
+            </label>
+        `).join('<br>');
+    } else {
+        checklistContainer.innerHTML = '<div class="empty-state-sm">No rules defined in your rulebook.</div>';
+    }
   }
 
   setupAddTradeForm() {
@@ -780,6 +827,7 @@ class TradingJournalApp {
       sectorPerformance: fd.get('sectorPerformance') || '',
       economicEvents: this.getCheckboxValues(form, 'economicEvents'),
       personalDistractions: this.getCheckboxValues(form, 'personalDistractions'),
+      followedRules: this.getCheckboxValues(form, 'followedRules'), // <-- NEW: Save followed rules
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     trade.grossPL = trade.direction === 'Long' ? (trade.exitPrice - trade.entryPrice) * trade.quantity : (trade.entryPrice - trade.exitPrice) * trade.quantity;
@@ -859,6 +907,20 @@ class TradingJournalApp {
     const t = this.trades.find(tr => tr.id === id);
     if (!t) return;
     const rrText = t.riskRewardRatio ? t.riskRewardRatio.toFixed(2) : '0.00';
+    
+    // <-- NEW: Display followed rules in trade details -->
+    let followedRulesHtml = '';
+    if (t.followedRules && t.followedRules.length > 0 && this.allRules.length > 0) {
+        followedRulesHtml = '<div style="margin-top:16px;"><strong>Followed Rules:</strong><ul>';
+        t.followedRules.forEach(ruleId => {
+            const rule = this.allRules.find(r => r.id === ruleId);
+            if (rule) {
+                followedRulesHtml += `<li>${rule.content}</li>`;
+            }
+        });
+        followedRulesHtml += '</ul></div>';
+    }
+
     const body = document.getElementById('tradeModalBody');
     body.innerHTML = `<div class="trade-detail-grid">
       <div class="trade-detail-item"><div class="trade-detail-label">Symbol</div><div class="trade-detail-value">${t.symbol}</div></div>
@@ -875,7 +937,8 @@ class TradingJournalApp {
       <div class="trade-detail-item"><div class="trade-detail-label">FOMO Level</div><div class="trade-detail-value">${t.fomoLevel || 'N/A'}/10</div></div>
     </div>
     ${t.notes ? `<div style="margin-top:16px;"><strong>Notes:</strong><p>${t.notes}</p></div>` : ''}
-    ${t.lesson ? `<div style="margin-top:16px;"><strong>Lesson Learned:</strong><p>${t.lesson}</p></div>` : ''}`;
+    ${t.lesson ? `<div style="margin-top:16px;"><strong>Lesson Learned:</strong><p>${t.lesson}</p></div>` : ''}
+    ${followedRulesHtml}`; // <-- NEW
     document.getElementById('tradeModal').classList.remove('hidden');
   }
 
@@ -1145,6 +1208,7 @@ class TradingJournalApp {
     document.getElementById('monthlyReport').innerHTML = this.generateMonthlyReport();
     document.getElementById('strategyReport').innerHTML = this.generateStrategyReport();
     document.getElementById('emotionalReport').innerHTML = this.generateEmotionalReport();
+    document.getElementById('rulebookReport').innerHTML = this.generateRulebookReport(); // <-- NEW
   }
 
   changeCalendarMonth(offset) {
@@ -1302,6 +1366,54 @@ class TradingJournalApp {
       <div class="report-item"><span>Least Profitable Emotion:</span><span>${leastProfitable.emotion} (${this.formatCurrency(leastProfitable.avg)}/trade)</span></div>
     `;
   }
+  
+  // <-- NEW: Rulebook Report Generation -->
+  generateRulebookReport() {
+    if (this.allRules.length === 0) {
+        return '<div class="empty-state">No rules in your rulebook to report on.</div>';
+    }
+
+    const ruleStats = {};
+    this.allRules.forEach(rule => {
+        ruleStats[rule.id] = {
+            content: rule.content,
+            followed: 0,
+            totalTrades: this.trades.length
+        };
+    });
+
+    this.trades.forEach(trade => {
+        if (trade.followedRules && Array.isArray(trade.followedRules)) {
+            trade.followedRules.forEach(ruleId => {
+                if (ruleStats[ruleId]) {
+                    ruleStats[ruleId].followed++;
+                }
+            });
+        }
+    });
+
+    let table = '<table class="report-table"><thead><tr><th>Rule</th><th>Followed</th><th>Not Followed</th><th>Adherence</th></tr></thead><tbody>';
+    for (const ruleId in ruleStats) {
+        const stat = ruleStats[ruleId];
+        const notFollowed = stat.totalTrades - stat.followed;
+        const adherence = stat.totalTrades > 0 ? Math.round((stat.followed / stat.totalTrades) * 100) : 0;
+        table += `
+            <tr>
+                <td class="rule-report-content">${stat.content}</td>
+                <td>${stat.followed}</td>
+                <td>${notFollowed}</td>
+                <td>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" style="width: ${adherence}%;"></div>
+                        <span>${adherence}%</span>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+    table += '</tbody></table>';
+    return table;
+  }
 
   generateAIFeedback() {
     const stats = this.calculateStats();
@@ -1402,8 +1514,8 @@ class TradingJournalApp {
     const totalPL = trades.reduce((sum, t) => sum + (t.netPL || 0), 0);
     const wins = trades.filter(t => t.netPL > 0).length;
     const winRate = trades.length > 0 ? Math.round((wins / trades.length) * 100) : 0;
-    const bestTrade = Math.max(0, ...trades.map(t => t.netPL));
-    const worstTrade = Math.min(0, ...trades.map(t => t.netPL));
+    const bestTrade = Math.max(0, ...this.trades.map(t => t.netPL));
+    const worstTrade = Math.min(0, ...this.trades.map(t => t.netPL));
     return { totalPL, winRate, totalTrades: trades.length, bestTrade, worstTrade };
   }
   
