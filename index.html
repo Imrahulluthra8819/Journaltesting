@@ -119,8 +119,8 @@
                                 <option value="₹">INR (₹)</option>
                                 <option value="$">USD ($)</option>
                             </select>
-                            <!-- Rulebook Button Added -->
-                            <button class="btn btn--secondary" id="myRulebookBtn">My Rulebook</button>
+                            <!-- "My Rulebook" button added here -->
+                            <button class="btn btn--secondary" id="showRulebookBtn">My Rulebook</button>
                             <button class="btn btn--primary" id="quickAddTrade">+ Add New Trade</button>
                         </div>
                     </div>
@@ -265,16 +265,6 @@
                                         <div class="form-group"><label class="form-label">Post-Trade Emotion</label><select name="postEmotion" class="form-control"><option value="">Select Emotion</option><option value="Satisfied">Satisfied</option><option value="Relieved">Relieved</option><option value="Disappointed">Disappointed</option><option value="Frustrated">Frustrated</option><option value="Regretful">Regretful</option><option value="Elated">Elated</option><option value="Neutral">Neutral</option></select></div>
                                         <div class="form-group full-width"><label class="form-label">Notes</label><textarea name="notes" class="form-control" rows="3" placeholder="What went well, what went wrong, improvements needed..."></textarea></div>
                                     </div>
-                                    
-                                    <!-- Rulebook Checklist Added -->
-                                    <details class="collapse-card">
-                                        <summary>Rulebook Check</summary>
-                                        <div class="collapse-content">
-                                            <div id="rulebookChecklist" class="checkbox-group">
-                                                <p>Loading rules...</p>
-                                            </div>
-                                        </div>
-                                    </details>
 
                                     <details class="collapse-card">
                                         <summary>Pre-Trade Psychology</summary>
@@ -316,6 +306,19 @@
                                                 </div>
                                                 <div class="form-group"><label class="form-label">Market Session</label><select name="marketSession" class="form-control"><option value="">Select</option><option>Pre-market</option><option>Market Open (9:30-10:30)</option><option>Mid-morning (10:30-12:00)</option><option>Lunch (12:00-14:00)</option><option>Afternoon (14:00-15:30)</option><option>Market Close (15:30-16:00)</option><option>After-hours</option></select></div>
                                                 <div class="form-group"><label class="form-label">Trade Catalyst</label><select name="tradeCatalyst" class="form-control"><option value="">Select</option><option>Technical breakout</option><option>Earnings</option><option>News event</option><option>Sector rotation</option><option>Market reversal</option><option>Momentum follow-through</option><option>Other</option></select></div>
+                                            </div>
+                                        </div>
+                                    </details>
+                                    
+                                    <!-- Rulebook Check section added here -->
+                                    <details class="collapse-card">
+                                        <summary>Rulebook Check</summary>
+                                        <div class="collapse-content">
+                                            <div class="form-group full-width">
+                                                <label class="form-label">Which rules did you follow for this trade?</label>
+                                                <div id="rulebookChecklist" class="checkbox-group">
+                                                    <!-- Checkboxes will be dynamically inserted here -->
+                                                </div>
                                             </div>
                                         </div>
                                     </details>
@@ -460,8 +463,15 @@
                         <div class="report-card card"><div class="card__body"><h3>Monthly Analysis</h3><div id="monthlyReport"><div class="loading">Generating monthly report...</div></div></div></div>
                         <div class="report-card card"><div class="card__body"><h3>Strategy Performance</h3><div id="strategyReport"><div class="loading">Analyzing strategies...</div></div></div></div>
                         <div class="report-card card"><div class="card__body"><h3>Emotional Patterns</h3><div id="emotionalReport"><div class="loading">Analyzing emotional patterns...</div></div></div></div>
-                        <!-- Rulebook Report Card Added -->
-                        <div class="report-card card"><div class="card__body"><h3>Rulebook Report</h3><div id="rulebookReport"><div class="loading">Analyzing rule adherence...</div></div></div></div>
+                        <!-- Rulebook Report card added here -->
+                        <div class="report-card card">
+                            <div class="card__body">
+                                <h3>Rulebook Adherence</h3>
+                                <div id="rulebookReport">
+                                    <div class="loading">Generating rulebook report...</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -504,7 +514,7 @@
             </div>
         </div>
 
-        <!-- Rulebook Modal Added -->
+        <!-- Rulebook Modal added here -->
         <div id="rulebookModal" class="modal hidden">
             <div class="modal-content">
                 <div class="modal-header">
@@ -513,27 +523,28 @@
                 </div>
                 <div class="modal-body">
                     <div class="card">
+                        <div class="card__header"><h3>Add/Edit Rule</h3></div>
                         <div class="card__body">
                             <form id="rulebookForm">
                                 <input type="hidden" id="ruleId" name="ruleId">
                                 <div class="form-group">
                                     <label for="ruleTitle" class="form-label">Rule Title</label>
-                                    <input type="text" id="ruleTitle" class="form-control" placeholder="e.g., Don't chase pumps" required>
+                                    <input type="text" id="ruleTitle" name="ruleTitle" class="form-control" placeholder="e.g., Don't chase trades" required>
                                 </div>
                                 <div class="form-group">
                                     <label for="ruleDescription" class="form-label">Rule Description</label>
-                                    <textarea id="ruleDescription" class="form-control" rows="3" placeholder="Detailed description of the rule..."></textarea>
+                                    <textarea id="ruleDescription" name="ruleDescription" class="form-control" rows="3" placeholder="Detailed description of the rule"></textarea>
                                 </div>
-                                <button type="submit" class="btn btn--primary">Save Rule</button>
-                                <button type="button" class="btn btn--outline" id="cancelEditRuleBtn" style="display:none;">Cancel Edit</button>
+                                <div class="form-actions" style="text-align: right; display: flex; gap: 8px; justify-content: flex-end;">
+                                    <button type="button" id="cancelEditRuleBtn" class="btn btn--outline hidden">Cancel</button>
+                                    <button type="submit" class="btn btn--primary">Save Rule</button>
+                                </div>
                             </form>
                         </div>
                     </div>
-                    <div class="card" style="margin-top: 20px;">
-                        <div class="card__header">
-                            <h3>Saved Rules</h3>
-                        </div>
-                        <div class="card__body" id="rulebookListContainer">
+                    <div class="card" style="margin-top: 24px;">
+                        <div class="card__header"><h3>Saved Rules</h3></div>
+                        <div id="ruleListContainer" class="card__body">
                             <!-- Rules will be loaded here -->
                         </div>
                     </div>
