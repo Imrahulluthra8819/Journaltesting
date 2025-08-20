@@ -240,6 +240,14 @@ pre code { background: none; padding: 0; }
   color: var(--color-text);
 }
 .btn--outline:hover { background: var(--color-secondary); }
+.btn--danger {
+    background: transparent;
+    border: 1px solid var(--color-error);
+    color: var(--color-error);
+}
+.btn--danger:hover {
+    background: rgba(var(--color-error-rgb), 0.1);
+}
 .btn--sm {
   padding: var(--space-4) var(--space-12);
   font-size: var(--font-size-sm);
@@ -1612,13 +1620,61 @@ select.form-control {
     line-height: 1.6;
     color: var(--color-text-secondary);
 }
-/* Add this to the very end of your style.css file */
-#expiredModal .modal-content {
-    animation: fadeIn 0.3s ease-out;
+
+/* --- NEW RULEBOOK STYLES --- */
+.rule-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-16);
+    border-bottom: 1px solid var(--color-border);
+}
+.rule-item:last-child {
+    border-bottom: none;
+}
+.rule-content {
+    margin: 0;
+    line-height: 1.6;
+    flex-grow: 1;
+}
+.rule-actions {
+    display: flex;
+    gap: var(--space-8);
+    margin-left: var(--space-16);
+}
+.empty-state-sm {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    text-align: center;
+    padding: var(--space-16);
 }
 
-@keyframes fadeIn {
-    from { opacity: 0; transform: scale(0.9); }
-    to { opacity: 1; transform: scale(1); }
+/* Rulebook Report Table */
+.report-table .rule-report-content {
+    max-width: 300px;
+    white-space: normal;
 }
-#mainApp { display: none; }
+.progress-bar-container {
+    width: 100%;
+    height: 20px;
+    background-color: var(--color-secondary);
+    border-radius: var(--radius-full);
+    position: relative;
+    overflow: hidden;
+}
+.progress-bar {
+    height: 100%;
+    background-color: var(--color-success);
+    border-radius: var(--radius-full);
+    transition: width 0.5s ease-in-out;
+}
+.progress-bar-container span {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--color-text);
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
