@@ -119,6 +119,7 @@
                                 <option value="₹">INR (₹)</option>
                                 <option value="$">USD ($)</option>
                             </select>
+                            <button class="btn btn--secondary" id="myRulebookBtn">My Rulebook</button>
                             <button class="btn btn--primary" id="quickAddTrade">+ Add New Trade</button>
                         </div>
                     </div>
@@ -263,6 +264,16 @@
                                         <div class="form-group"><label class="form-label">Post-Trade Emotion</label><select name="postEmotion" class="form-control"><option value="">Select Emotion</option><option value="Satisfied">Satisfied</option><option value="Relieved">Relieved</option><option value="Disappointed">Disappointed</option><option value="Frustrated">Frustrated</option><option value="Regretful">Regretful</option><option value="Elated">Elated</option><option value="Neutral">Neutral</option></select></div>
                                         <div class="form-group full-width"><label class="form-label">Notes</label><textarea name="notes" class="form-control" rows="3" placeholder="What went well, what went wrong, improvements needed..."></textarea></div>
                                     </div>
+                                    
+                                    <!-- RULEBOOK CHECK SECTION -->
+                                    <details class="collapse-card">
+                                        <summary>Rulebook Check</summary>
+                                        <div class="collapse-content">
+                                            <div id="rulebookChecklist" class="checkbox-group">
+                                                <!-- Checkboxes will be dynamically inserted here -->
+                                            </div>
+                                        </div>
+                                    </details>
 
                                     <details class="collapse-card">
                                         <summary>Pre-Trade Psychology</summary>
@@ -443,7 +454,13 @@
                 <div class="container">
                     <div class="section-header"><h1>Reports & Calendar</h1><button class="btn btn--primary" id="exportData">Export to CSV</button></div>
                     <div class="calendar-section card"><div class="card__header"><h3>P&L Calendar</h3><div class="calendar-nav"><button class="btn btn--outline btn--sm" id="prevMonth">‹</button><span id="currentMonth">July 2025</span><button class="btn btn--outline btn--sm" id="nextMonth">›</button></div></div><div class="card__body"><div id="plCalendar" class="pl-calendar"></div><div class="calendar-legend"><div class="legend-item"><div class="legend-color profit-high"></div><span>High Profit (>₹1000)</span></div><div class="legend-item"><div class="legend-color profit-low"></div><span>Profit</span></div><div class="legend-item"><div class="legend-color no-trades"></div><span>No Trades</span></div><div class="legend-item"><div class="legend-color loss-low"></div><span>Loss</span></div><div class="legend-item"><div class="legend-color loss-high"></div><span>High Loss (<-₹1000)</span></div></div></div></div>
-                    <div class="reports-grid"><div class="report-card card"><div class="card__body"><h3>Weekly Summary</h3><div id="weeklyReport"><div class="loading">Generating weekly report...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Monthly Analysis</h3><div id="monthlyReport"><div class="loading">Generating monthly report...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Strategy Performance</h3><div id="strategyReport"><div class="loading">Analyzing strategies...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Emotional Patterns</h3><div id="emotionalReport"><div class="loading">Analyzing emotional patterns...</div></div></div></div></div>
+                    <div class="reports-grid">
+                        <div class="report-card card"><div class="card__body"><h3>Weekly Summary</h3><div id="weeklyReport"><div class="loading">Generating weekly report...</div></div></div></div>
+                        <div class="report-card card"><div class="card__body"><h3>Monthly Analysis</h3><div id="monthlyReport"><div class="loading">Generating monthly report...</div></div></div></div>
+                        <div class="report-card card"><div class="card__body"><h3>Strategy Performance</h3><div id="strategyReport"><div class="loading">Analyzing strategies...</div></div></div></div>
+                        <div class="report-card card"><div class="card__body"><h3>Emotional Patterns</h3><div id="emotionalReport"><div class="loading">Analyzing emotional patterns...</div></div></div></div>
+                        <div class="report-card card"><div class="card__body"><h3>Rulebook Report</h3><div id="rulebookReport"><div class="loading">Analyzing rule adherence...</div></div></div></div>
+                    </div>
                 </div>
             </section>
 
@@ -464,6 +481,22 @@
                     </div>
                 </div>
             </section>
+            
+            <!-- Rulebook Section -->
+            <section id="rulebook" class="section">
+                <div class="container">
+                    <div class="section-header">
+                        <h1>My Trading Rulebook</h1>
+                        <button class="btn btn--primary" id="addRuleBtn">+ Add New Rule</button>
+                    </div>
+                    <p>Define and manage your personal trading rules to maintain discipline.</p>
+                    <div class="card">
+                        <div id="rulebookList" class="card__body">
+                            <!-- Rules will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
 
         </main>
         <div id="tradeModal" class="modal hidden"><div class="modal-content"><div class="modal-header"><h2>Trade Details</h2><button class="modal-close" onclick="app.hideTradeModal()">&times;</button></div><div class="modal-body" id="tradeModalBody"></div><div class="modal-footer"><button class="btn btn--outline" onclick="app.hideTradeModal()">Close</button><button class="btn btn--primary" id="editTradeBtn">Edit Trade</button></div></div></div>
@@ -481,6 +514,28 @@
                 <div class="modal-footer">
                     <button class="btn btn--outline" onclick="app.hideNoteModal()">Close</button>
                     <button class="btn btn--primary" id="saveNoteChangesBtn">Save Changes</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Rulebook Modal -->
+        <div id="ruleModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="ruleModalTitle">Add New Rule</h2>
+                    <button class="modal-close" onclick="app.hideRuleModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="ruleForm">
+                        <div class="form-group">
+                            <label for="ruleContent" class="form-label">Rule Description</label>
+                            <textarea id="ruleContent" class="form-control" rows="4" placeholder="e.g., Never risk more than 1% of my capital on a single trade."></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn--outline" onclick="app.hideRuleModal()">Cancel</button>
+                    <button class="btn btn--primary" id="saveRuleBtn">Save Rule</button>
                 </div>
             </div>
         </div>
@@ -513,27 +568,6 @@
     </div>
     <div id="toastContainer" class="toast-container"></div>
     <div id="calendarTooltip" class="calendar-tooltip"></div>
-    <!-- START: Add this new modal for expired subscriptions -->
-<!-- START: Add this new modal for expired subscriptions -->
-<div id="expiredModal" class="modal hidden">
-    <div class="modal-content" style="max-width: 450px;">
-        <div class="modal-header">
-            <h2>Subscription Required</h2>
-        </div>
-        <div class="modal-body" style="text-align: center;">
-            <div style="font-size: 48px; color: var(--color-warning); margin-bottom: 16px;">⚠️</div>
-            <p id="expiredModalMessage" style="font-size: 1.1rem; color: var(--color-text-secondary); line-height: 1.6;">
-                Your free trial has ended. Please subscribe to continue using TraderLog.
-            </p>
-        </div>
-        <div class="modal-footer">
-            <button class="btn btn--primary btn--full-width" id="redirectToPaymentBtn">
-                Go to Subscription Page
-            </button>
-        </div>
-    </div>
-</div>
-<!-- END: New modal --><!-- END: New modal -->
 
     <script src="app.js"></script>
 </body>
