@@ -241,12 +241,12 @@ pre code { background: none; padding: 0; }
 }
 .btn--outline:hover { background: var(--color-secondary); }
 .btn--danger {
-    background-color: transparent;
-    border: 1px solid var(--color-danger);
-    color: var(--color-danger);
+  background: transparent;
+  border: 1px solid var(--color-error);
+  color: var(--color-error);
 }
 .btn--danger:hover {
-    background-color: rgba(var(--color-danger-val), 0.1);
+    background: rgba(var(--color-error-rgb), 0.1);
 }
 .btn--sm {
   padding: var(--space-4) var(--space-12);
@@ -652,6 +652,12 @@ select.form-control {
   text-align: center;
   padding: var(--space-32);
   color: var(--color-text-secondary);
+}
+.empty-state-sm {
+  text-align: left;
+  padding: var(--space-8) 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 .loading {
   text-align: center;
@@ -1625,42 +1631,74 @@ select.form-control {
 .rule-item {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    padding: var(--space-12) 0;
+    align-items: flex-start;
+    padding: var(--space-16) 0;
     border-bottom: 1px solid var(--color-border);
 }
 .rule-item:last-child {
     border-bottom: none;
+    padding-bottom: 0;
+}
+.rule-item:first-child {
+    padding-top: 0;
 }
 .rule-content {
     flex-grow: 1;
+    margin-right: var(--space-16);
 }
 .rule-title {
-    font-size: var(--font-size-md);
+    font-size: var(--font-size-lg);
     font-weight: var(--font-weight-semibold);
+    color: var(--color-text);
     margin: 0 0 var(--space-4) 0;
 }
 .rule-description {
     font-size: var(--font-size-sm);
     color: var(--color-text-secondary);
     margin: 0;
+    line-height: 1.5;
 }
 .rule-actions {
     display: flex;
     gap: var(--space-8);
     flex-shrink: 0;
-    margin-left: var(--space-16);
+}
+#ruleListContainer {
+    padding: 0 var(--space-16) var(--space-16) var(--space-16);
 }
 
+/* --- RULEBOOK REPORT STYLES --- */
 .report-table {
     width: 100%;
     border-collapse: collapse;
+    font-size: var(--font-size-sm);
 }
 .report-table th, .report-table td {
-    padding: var(--space-8) var(--space-12);
+    padding: var(--space-8);
     text-align: left;
     border-bottom: 1px solid var(--color-border);
 }
 .report-table th {
     font-weight: var(--font-weight-semibold);
+}
+.report-table tr:last-child td {
+    border-bottom: none;
+}
+.progress-bar {
+    width: 100%;
+    height: 20px;
+    background-color: var(--color-secondary);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+.progress-bar-fill {
+    height: 100%;
+    background-color: var(--color-success);
+    color: var(--color-darker-val);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: var(--font-weight-bold);
+    transition: width 0.5s var(--ease-standard);
 }
