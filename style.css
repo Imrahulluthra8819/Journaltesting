@@ -241,12 +241,12 @@ pre code { background: none; padding: 0; }
 }
 .btn--outline:hover { background: var(--color-secondary); }
 .btn--danger {
-    background: transparent;
-    border: 1px solid var(--color-error);
-    color: var(--color-error);
+    background-color: transparent;
+    border: 1px solid var(--color-danger);
+    color: var(--color-danger);
 }
 .btn--danger:hover {
-    background: rgba(var(--color-error-rgb), 0.1);
+    background-color: rgba(var(--color-danger-val), 0.1);
 }
 .btn--sm {
   padding: var(--space-4) var(--space-12);
@@ -1621,60 +1621,46 @@ select.form-control {
     color: var(--color-text-secondary);
 }
 
-/* --- NEW RULEBOOK STYLES --- */
+/* --- RULEBOOK STYLES --- */
 .rule-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--space-16);
+    padding: var(--space-12) 0;
     border-bottom: 1px solid var(--color-border);
 }
 .rule-item:last-child {
     border-bottom: none;
 }
 .rule-content {
-    margin: 0;
-    line-height: 1.6;
     flex-grow: 1;
+}
+.rule-title {
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+    margin: 0 0 var(--space-4) 0;
+}
+.rule-description {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    margin: 0;
 }
 .rule-actions {
     display: flex;
     gap: var(--space-8);
+    flex-shrink: 0;
     margin-left: var(--space-16);
 }
-.empty-state-sm {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-    text-align: center;
-    padding: var(--space-16);
-}
 
-/* Rulebook Report Table */
-.report-table .rule-report-content {
-    max-width: 300px;
-    white-space: normal;
-}
-.progress-bar-container {
+.report-table {
     width: 100%;
-    height: 20px;
-    background-color: var(--color-secondary);
-    border-radius: var(--radius-full);
-    position: relative;
-    overflow: hidden;
+    border-collapse: collapse;
 }
-.progress-bar {
-    height: 100%;
-    background-color: var(--color-success);
-    border-radius: var(--radius-full);
-    transition: width 0.5s ease-in-out;
+.report-table th, .report-table td {
+    padding: var(--space-8) var(--space-12);
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
 }
-.progress-bar-container span {
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 12px;
-    font-weight: bold;
-    color: var(--color-text);
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+.report-table th {
+    font-weight: var(--font-weight-semibold);
 }
