@@ -22,9 +22,8 @@ class TradingJournalApp {
     this.allTrades = [];
     this.allConfidence = [];
     this.allNotes = [];
-    this.allRules = []; // <-- NEW: For Rulebook
-    this.currentEditingNoteId = null; 
-    this.currentEditingRuleId = null; // <-- NEW: For Rulebook
+    this.allRules = []; // New state for Rulebook
+    this.currentEditingNoteId = null; // To track the note being edited
     this.charts = {};
     this.mainListenersAttached = false;
     this.currentCalendarDate = new Date();
@@ -61,7 +60,7 @@ class TradingJournalApp {
         this.allTrades = [];
         this.allConfidence = [];
         this.allNotes = [];
-        this.allRules = []; // <-- NEW: Clear rules on logout
+        this.allRules = [];
         Object.values(this.charts).forEach(chart => chart?.destroy());
         this.charts = {};
         this.showAuthScreen();
@@ -180,8 +179,7 @@ class TradingJournalApp {
     const tradesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('trades').orderBy('entryDate', 'desc').get();
     const confidenceQuery = this.db.collection('users').doc(this.currentUser.uid).collection('confidence').orderBy('date', 'desc').get();
     const notesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('notes').orderBy('date', 'desc').get();
-    const rulesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('rules').orderBy('createdAt', 'asc').get(); // <-- NEW: Rulebook query
-    
+    const rulesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('rules').orderBy('createdAt', 'asc').get(); // Load rules
     try {
       const [tradesSnapshot, confidenceSnapshot, notesSnapshot, rulesSnapshot] = await Promise.all([tradesQuery, confidenceQuery, notesQuery, rulesQuery]);
       this.allTrades = tradesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -190,7 +188,7 @@ class TradingJournalApp {
       console.log(`[DATA] Loaded ${this.allConfidence.length} confidence entries.`);
       this.allNotes = notesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       console.log(`[DATA] Loaded ${this.allNotes.length} notes.`);
-      this.allRules = rulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); // <-- NEW: Load rules
+      this.allRules = rulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       console.log(`[DATA] Loaded ${this.allRules.length} rules.`);
     } catch (error) {
       console.error("[DATA] Error loading user data:", error);
@@ -231,18 +229,25 @@ class TradingJournalApp {
         document.dispatchEvent(new CustomEvent('data-changed'));
     });
     document.getElementById('quickAddTrade').addEventListener('click', () => this.showSection('add-trade'));
-    document.getElementById('myRulebookBtn').addEventListener('click', () => this.showSection('rulebook')); // <-- NEW
-    document.getElementById('addRuleBtn').addEventListener('click', () => this.showRuleModal()); // <-- NEW
-    document.getElementById('saveRuleBtn').addEventListener('click', () => this.saveRule()); // <-- NEW
     document.getElementById('saveConfidenceBtn').addEventListener('click', () => this.saveDailyConfidence());
     document.getElementById('saveNoteBtn').addEventListener('click', () => this.saveNote());
-    document.getElementById('saveNoteChangesBtn').addEventListener('click', () => this.saveNoteChanges());
+    document.getElementById('saveNoteChangesBtn').addEventListener('click', () => this.saveNoteChanges()); // Listener for modal save
     this.setupAddTradeForm();
     document.getElementById('exportData').addEventListener('click', () => this.exportCSV());
     document.getElementById('prevMonth').addEventListener('click', () => this.changeCalendarMonth(-1));
     document.getElementById('nextMonth').addEventListener('click', () => this.changeCalendarMonth(1));
     document.getElementById('dashPrevMonth').addEventListener('click', () => this.changeCalendarMonth(-1));
     document.getElementById('dashNextMonth').addEventListener('click', () => this.changeCalendarMonth(1));
+    
+    // --- RULEBOOK LISTENERS ---
+    document.getElementById('myRulebookBtn').addEventListener('click', () => this.showRulebookModal());
+    document.getElementById('rulebookForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.saveRule();
+    });
+    document.getElementById('cancelEditRuleBtn').addEventListener('click', () => this.resetRulebookForm());
+
+
     document.addEventListener('data-changed', () => {
       const activeSection = document.querySelector('.section.active');
       if (activeSection) this.showSection(activeSection.id);
@@ -343,7 +348,6 @@ class TradingJournalApp {
       case 'ai-suggestions': this.renderAISuggestions(); break;
       case 'reports': this.renderReports(); break;
       case 'charts': this.renderCharts(); break;
-      case 'rulebook': this.renderRulebook(); break; // <-- NEW
     }
   }
 
@@ -591,98 +595,6 @@ class TradingJournalApp {
         console.error("[DATA] Error updating note:", error);
     }
   }
-  
-  /* ----------------------- RULEBOOK SECTION (NEW) --------------------- */
-  renderRulebook() {
-    const container = document.getElementById('rulebookList');
-    if (this.allRules.length === 0) {
-        container.innerHTML = '<div class="empty-state">You have not added any rules yet. Click "Add New Rule" to start.</div>';
-        return;
-    }
-
-    container.innerHTML = this.allRules.map(rule => `
-        <div class="rule-item">
-            <p class="rule-content">${rule.content.replace(/\n/g, '<br>')}</p>
-            <div class="rule-actions">
-                <button class="btn btn--outline btn--sm" onclick="app.showRuleModal('${rule.id}')">Edit</button>
-                <button class="btn btn--danger btn--sm" onclick="app.deleteRule('${rule.id}')">Delete</button>
-            </div>
-        </div>
-    `).join('');
-  }
-
-  showRuleModal(ruleId = null) {
-      const modal = document.getElementById('ruleModal');
-      const title = document.getElementById('ruleModalTitle');
-      const content = document.getElementById('ruleContent');
-      const form = document.getElementById('ruleForm');
-      form.reset();
-
-      if (ruleId) {
-          const rule = this.allRules.find(r => r.id === ruleId);
-          if (rule) {
-              this.currentEditingRuleId = ruleId;
-              title.textContent = 'Edit Rule';
-              content.value = rule.content;
-          }
-      } else {
-          this.currentEditingRuleId = null;
-          title.textContent = 'Add New Rule';
-      }
-      modal.classList.remove('hidden');
-  }
-
-  hideRuleModal() {
-      document.getElementById('ruleModal').classList.add('hidden');
-      this.currentEditingRuleId = null;
-  }
-
-  async saveRule() {
-      const content = document.getElementById('ruleContent').value.trim();
-      if (!content) {
-          this.showToast('Rule content cannot be empty.', 'warning');
-          return;
-      }
-
-      try {
-          if (this.currentEditingRuleId) {
-              // Update existing rule
-              await this.db.collection('users').doc(this.currentUser.uid).collection('rules').doc(this.currentEditingRuleId).update({
-                  content: content
-              });
-              const ruleIndex = this.allRules.findIndex(r => r.id === this.currentEditingRuleId);
-              this.allRules[ruleIndex].content = content;
-              this.showToast('Rule updated successfully!', 'success');
-          } else {
-              // Add new rule
-              const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('rules').add({
-                  content: content,
-                  createdAt: firebase.firestore.FieldValue.serverTimestamp()
-              });
-              this.allRules.push({ id: docRef.id, content: content });
-              this.showToast('Rule added successfully!', 'success');
-          }
-          this.hideRuleModal();
-          document.dispatchEvent(new CustomEvent('data-changed'));
-      } catch (error) {
-          this.showToast(`Error saving rule: ${error.message}`, 'error');
-          console.error('[DATA] Error saving rule:', error);
-      }
-  }
-
-  async deleteRule(ruleId) {
-      if (!confirm('Are you sure you want to delete this rule?')) return;
-
-      try {
-          await this.db.collection('users').doc(this.currentUser.uid).collection('rules').doc(ruleId).delete();
-          this.allRules = this.allRules.filter(r => r.id !== ruleId);
-          this.showToast('Rule deleted.', 'info');
-          document.dispatchEvent(new CustomEvent('data-changed'));
-      } catch (error) {
-          this.showToast(`Error deleting rule: ${error.message}`, 'error');
-          console.error('[DATA] Error deleting rule:', error);
-      }
-  }
 
   /* ----------------------- ADD TRADE FORM ------------------------------ */
   renderAddTrade() {
@@ -691,18 +603,7 @@ class TradingJournalApp {
     const exitDateEl = document.querySelector('input[name="exitDate"]');
     if (entryDateEl) entryDateEl.value = now.toISOString().slice(0, 16);
     if (exitDateEl) exitDateEl.value = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 16);
-
-    // <-- NEW: Populate Rulebook Checklist -->
-    const checklistContainer = document.getElementById('rulebookChecklist');
-    if (this.allRules.length > 0) {
-        checklistContainer.innerHTML = this.allRules.map(rule => `
-            <label>
-                <input type="checkbox" name="followedRules" value="${rule.id}"> ${rule.content}
-            </label>
-        `).join('<br>');
-    } else {
-        checklistContainer.innerHTML = '<div class="empty-state-sm">No rules defined in your rulebook.</div>';
-    }
+    this.renderRulebookCheckboxes(); // Render checkboxes when showing the form
   }
 
   setupAddTradeForm() {
@@ -827,7 +728,7 @@ class TradingJournalApp {
       sectorPerformance: fd.get('sectorPerformance') || '',
       economicEvents: this.getCheckboxValues(form, 'economicEvents'),
       personalDistractions: this.getCheckboxValues(form, 'personalDistractions'),
-      followedRules: this.getCheckboxValues(form, 'followedRules'), // <-- NEW: Save followed rules
+      followedRules: this.getCheckboxValues(form, 'followedRules'), // Save followed rules
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     trade.grossPL = trade.direction === 'Long' ? (trade.exitPrice - trade.entryPrice) * trade.quantity : (trade.entryPrice - trade.exitPrice) * trade.quantity;
@@ -908,17 +809,16 @@ class TradingJournalApp {
     if (!t) return;
     const rrText = t.riskRewardRatio ? t.riskRewardRatio.toFixed(2) : '0.00';
     
-    // <-- NEW: Display followed rules in trade details -->
+    // Rulebook details for the modal
     let followedRulesHtml = '';
-    if (t.followedRules && t.followedRules.length > 0 && this.allRules.length > 0) {
-        followedRulesHtml = '<div style="margin-top:16px;"><strong>Followed Rules:</strong><ul>';
-        t.followedRules.forEach(ruleId => {
+    if (t.followedRules && t.followedRules.length > 0) {
+        const followedRuleTitles = t.followedRules.map(ruleId => {
             const rule = this.allRules.find(r => r.id === ruleId);
-            if (rule) {
-                followedRulesHtml += `<li>${rule.content}</li>`;
-            }
-        });
-        followedRulesHtml += '</ul></div>';
+            return rule ? rule.title : 'Unknown Rule';
+        }).join(', ');
+        followedRulesHtml = `<div style="margin-top:16px;"><strong>Rules Followed:</strong><p>${followedRuleTitles}</p></div>`;
+    } else {
+        followedRulesHtml = `<div style="margin-top:16px;"><strong>Rules Followed:</strong><p>None recorded for this trade.</p></div>`;
     }
 
     const body = document.getElementById('tradeModalBody');
@@ -938,7 +838,7 @@ class TradingJournalApp {
     </div>
     ${t.notes ? `<div style="margin-top:16px;"><strong>Notes:</strong><p>${t.notes}</p></div>` : ''}
     ${t.lesson ? `<div style="margin-top:16px;"><strong>Lesson Learned:</strong><p>${t.lesson}</p></div>` : ''}
-    ${followedRulesHtml}`; // <-- NEW
+    ${followedRulesHtml}`;
     document.getElementById('tradeModal').classList.remove('hidden');
   }
 
@@ -1208,7 +1108,7 @@ class TradingJournalApp {
     document.getElementById('monthlyReport').innerHTML = this.generateMonthlyReport();
     document.getElementById('strategyReport').innerHTML = this.generateStrategyReport();
     document.getElementById('emotionalReport').innerHTML = this.generateEmotionalReport();
-    document.getElementById('rulebookReport').innerHTML = this.generateRulebookReport(); // <-- NEW
+    document.getElementById('rulebookReport').innerHTML = this.generateRulebookReport(); // Render new report
   }
 
   changeCalendarMonth(offset) {
@@ -1366,54 +1266,6 @@ class TradingJournalApp {
       <div class="report-item"><span>Least Profitable Emotion:</span><span>${leastProfitable.emotion} (${this.formatCurrency(leastProfitable.avg)}/trade)</span></div>
     `;
   }
-  
-  // <-- NEW: Rulebook Report Generation -->
-  generateRulebookReport() {
-    if (this.allRules.length === 0) {
-        return '<div class="empty-state">No rules in your rulebook to report on.</div>';
-    }
-
-    const ruleStats = {};
-    this.allRules.forEach(rule => {
-        ruleStats[rule.id] = {
-            content: rule.content,
-            followed: 0,
-            totalTrades: this.trades.length
-        };
-    });
-
-    this.trades.forEach(trade => {
-        if (trade.followedRules && Array.isArray(trade.followedRules)) {
-            trade.followedRules.forEach(ruleId => {
-                if (ruleStats[ruleId]) {
-                    ruleStats[ruleId].followed++;
-                }
-            });
-        }
-    });
-
-    let table = '<table class="report-table"><thead><tr><th>Rule</th><th>Followed</th><th>Not Followed</th><th>Adherence</th></tr></thead><tbody>';
-    for (const ruleId in ruleStats) {
-        const stat = ruleStats[ruleId];
-        const notFollowed = stat.totalTrades - stat.followed;
-        const adherence = stat.totalTrades > 0 ? Math.round((stat.followed / stat.totalTrades) * 100) : 0;
-        table += `
-            <tr>
-                <td class="rule-report-content">${stat.content}</td>
-                <td>${stat.followed}</td>
-                <td>${notFollowed}</td>
-                <td>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar" style="width: ${adherence}%;"></div>
-                        <span>${adherence}%</span>
-                    </div>
-                </td>
-            </tr>
-        `;
-    }
-    table += '</tbody></table>';
-    return table;
-  }
 
   generateAIFeedback() {
     const stats = this.calculateStats();
@@ -1514,8 +1366,8 @@ class TradingJournalApp {
     const totalPL = trades.reduce((sum, t) => sum + (t.netPL || 0), 0);
     const wins = trades.filter(t => t.netPL > 0).length;
     const winRate = trades.length > 0 ? Math.round((wins / trades.length) * 100) : 0;
-    const bestTrade = Math.max(0, ...this.trades.map(t => t.netPL));
-    const worstTrade = Math.min(0, ...this.trades.map(t => t.netPL));
+    const bestTrade = Math.max(0, ...trades.map(t => t.netPL));
+    const worstTrade = Math.min(0, ...trades.map(t => t.netPL));
     return { totalPL, winRate, totalTrades: trades.length, bestTrade, worstTrade };
   }
   
@@ -1643,6 +1495,164 @@ class TradingJournalApp {
   }
   // --- END: NEW DASHBOARD CALENDAR METHOD ---
   
+  // --- START: RULEBOOK METHODS ---
+  showRulebookModal() {
+    this.renderRulebookList();
+    document.getElementById('rulebookModal').classList.remove('hidden');
+  }
+
+  hideRulebookModal() {
+    this.resetRulebookForm();
+    document.getElementById('rulebookModal').classList.add('hidden');
+  }
+
+  async saveRule() {
+    const form = document.getElementById('rulebookForm');
+    const ruleId = form.ruleId.value;
+    const title = form.ruleTitle.value.trim();
+    const description = form.ruleDescription.value.trim();
+
+    if (!title) {
+        this.showToast('Rule title is required.', 'warning');
+        return;
+    }
+
+    const ruleData = {
+        title,
+        description,
+    };
+
+    try {
+        if (ruleId) { // Editing existing rule
+            await this.db.collection('users').doc(this.currentUser.uid).collection('rules').doc(ruleId).update(ruleData);
+            const index = this.allRules.findIndex(r => r.id === ruleId);
+            this.allRules[index] = { id: ruleId, ...this.allRules[index], ...ruleData };
+            this.showToast('Rule updated successfully!', 'success');
+        } else { // Adding new rule
+            ruleData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('rules').add(ruleData);
+            this.allRules.push({ id: docRef.id, ...ruleData });
+            this.showToast('Rule added successfully!', 'success');
+        }
+        this.resetRulebookForm();
+        this.renderRulebookList();
+        this.renderRulebookCheckboxes(); // Update checkboxes in add trade form
+    } catch (error) {
+        console.error("Error saving rule:", error);
+        this.showToast(`Error saving rule: ${error.message}`, 'error');
+    }
+  }
+
+  async deleteRule(ruleId) {
+    if (!confirm('Are you sure you want to delete this rule?')) return;
+    try {
+        await this.db.collection('users').doc(this.currentUser.uid).collection('rules').doc(ruleId).delete();
+        this.allRules = this.allRules.filter(r => r.id !== ruleId);
+        this.showToast('Rule deleted.', 'info');
+        this.renderRulebookList();
+        this.renderRulebookCheckboxes();
+    } catch (error) {
+        console.error("Error deleting rule:", error);
+        this.showToast(`Error deleting rule: ${error.message}`, 'error');
+    }
+  }
+
+  editRule(ruleId) {
+    const rule = this.allRules.find(r => r.id === ruleId);
+    if (!rule) return;
+    const form = document.getElementById('rulebookForm');
+    form.ruleId.value = rule.id;
+    form.ruleTitle.value = rule.title;
+    form.ruleDescription.value = rule.description;
+    document.getElementById('cancelEditRuleBtn').style.display = 'inline-block';
+  }
+  
+  resetRulebookForm() {
+    const form = document.getElementById('rulebookForm');
+    form.reset();
+    form.ruleId.value = '';
+    document.getElementById('cancelEditRuleBtn').style.display = 'none';
+  }
+
+  renderRulebookList() {
+    const container = document.getElementById('rulebookListContainer');
+    if (this.allRules.length === 0) {
+        container.innerHTML = '<div class="empty-state">No rules defined yet. Add one above!</div>';
+        return;
+    }
+    container.innerHTML = this.allRules.map(rule => `
+        <div class="rule-item">
+            <div class="rule-content">
+                <h4 class="rule-title">${rule.title}</h4>
+                <p class="rule-description">${rule.description || 'No description.'}</p>
+            </div>
+            <div class="rule-actions">
+                <button class="btn btn--outline btn--sm" onclick="app.editRule('${rule.id}')">Edit</button>
+                <button class="btn btn--danger btn--sm" onclick="app.deleteRule('${rule.id}')">Delete</button>
+            </div>
+        </div>
+    `).join('');
+  }
+
+  renderRulebookCheckboxes() {
+    const container = document.getElementById('rulebookChecklist');
+    if (!container) return;
+    if (this.allRules.length === 0) {
+        container.innerHTML = '<p>No rules defined. Go to "My Rulebook" on the dashboard to add rules.</p>';
+        return;
+    }
+    container.innerHTML = this.allRules.map(rule => `
+        <label>
+            <input type="checkbox" name="followedRules" value="${rule.id}">
+            ${rule.title}
+        </label>
+    `).join('');
+  }
+
+  generateRulebookReport() {
+    if (this.allRules.length === 0) {
+        return '<div class="empty-state">No rules defined to report on.</div>';
+    }
+    if (this.trades.length === 0) {
+        return '<div class="empty-state">No trades recorded to analyze rule adherence.</div>';
+    }
+
+    const ruleStats = {};
+    this.allRules.forEach(rule => {
+        ruleStats[rule.id] = { title: rule.title, followed: 0 };
+    });
+
+    this.trades.forEach(trade => {
+        if (trade.followedRules && Array.isArray(trade.followedRules)) {
+            trade.followedRules.forEach(ruleId => {
+                if (ruleStats[ruleId]) {
+                    ruleStats[ruleId].followed++;
+                }
+            });
+        }
+    });
+
+    let table = '<table class="report-table"><thead><tr><th>Rule Title</th><th>Followed</th><th>Not Followed</th><th>Adherence</th></tr></thead><tbody>';
+    const totalTrades = this.trades.length;
+
+    for (const ruleId in ruleStats) {
+        const stats = ruleStats[ruleId];
+        const notFollowed = totalTrades - stats.followed;
+        const adherence = totalTrades > 0 ? Math.round((stats.followed / totalTrades) * 100) : 0;
+        table += `
+            <tr>
+                <td>${stats.title}</td>
+                <td>${stats.followed}</td>
+                <td>${notFollowed}</td>
+                <td>${adherence}%</td>
+            </tr>
+        `;
+    }
+    table += '</tbody></table>';
+    return table;
+  }
+  // --- END: RULEBOOK METHODS ---
+
   /* ------------------------ EXPORT ------------------------------------- */
   exportCSV() {
     if (this.trades.length===0) { this.showToast('No trades to export','warning'); return; }
