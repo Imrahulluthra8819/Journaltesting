@@ -119,6 +119,7 @@
                                 <option value="₹">INR (₹)</option>
                                 <option value="$">USD ($)</option>
                             </select>
+                            <!-- Rulebook Button Added -->
                             <button class="btn btn--secondary" id="myRulebookBtn">My Rulebook</button>
                             <button class="btn btn--primary" id="quickAddTrade">+ Add New Trade</button>
                         </div>
@@ -265,12 +266,12 @@
                                         <div class="form-group full-width"><label class="form-label">Notes</label><textarea name="notes" class="form-control" rows="3" placeholder="What went well, what went wrong, improvements needed..."></textarea></div>
                                     </div>
                                     
-                                    <!-- RULEBOOK CHECK SECTION -->
+                                    <!-- Rulebook Checklist Added -->
                                     <details class="collapse-card">
                                         <summary>Rulebook Check</summary>
                                         <div class="collapse-content">
                                             <div id="rulebookChecklist" class="checkbox-group">
-                                                <!-- Checkboxes will be dynamically inserted here -->
+                                                <p>Loading rules...</p>
                                             </div>
                                         </div>
                                     </details>
@@ -459,6 +460,7 @@
                         <div class="report-card card"><div class="card__body"><h3>Monthly Analysis</h3><div id="monthlyReport"><div class="loading">Generating monthly report...</div></div></div></div>
                         <div class="report-card card"><div class="card__body"><h3>Strategy Performance</h3><div id="strategyReport"><div class="loading">Analyzing strategies...</div></div></div></div>
                         <div class="report-card card"><div class="card__body"><h3>Emotional Patterns</h3><div id="emotionalReport"><div class="loading">Analyzing emotional patterns...</div></div></div></div>
+                        <!-- Rulebook Report Card Added -->
                         <div class="report-card card"><div class="card__body"><h3>Rulebook Report</h3><div id="rulebookReport"><div class="loading">Analyzing rule adherence...</div></div></div></div>
                     </div>
                 </div>
@@ -478,22 +480,6 @@
                               <span class="blue-text">Track all markets on TradingView</span>
                           </a>
                       </div>
-                    </div>
-                </div>
-            </section>
-            
-            <!-- Rulebook Section -->
-            <section id="rulebook" class="section">
-                <div class="container">
-                    <div class="section-header">
-                        <h1>My Trading Rulebook</h1>
-                        <button class="btn btn--primary" id="addRuleBtn">+ Add New Rule</button>
-                    </div>
-                    <p>Define and manage your personal trading rules to maintain discipline.</p>
-                    <div class="card">
-                        <div id="rulebookList" class="card__body">
-                            <!-- Rules will be loaded here -->
-                        </div>
                     </div>
                 </div>
             </section>
@@ -517,25 +503,40 @@
                 </div>
             </div>
         </div>
-        
-        <!-- Rulebook Modal -->
-        <div id="ruleModal" class="modal hidden">
+
+        <!-- Rulebook Modal Added -->
+        <div id="rulebookModal" class="modal hidden">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h2 id="ruleModalTitle">Add New Rule</h2>
-                    <button class="modal-close" onclick="app.hideRuleModal()">&times;</button>
+                    <h2>My Rulebook</h2>
+                    <button class="modal-close" onclick="app.hideRulebookModal()">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <form id="ruleForm">
-                        <div class="form-group">
-                            <label for="ruleContent" class="form-label">Rule Description</label>
-                            <textarea id="ruleContent" class="form-control" rows="4" placeholder="e.g., Never risk more than 1% of my capital on a single trade."></textarea>
+                    <div class="card">
+                        <div class="card__body">
+                            <form id="rulebookForm">
+                                <input type="hidden" id="ruleId" name="ruleId">
+                                <div class="form-group">
+                                    <label for="ruleTitle" class="form-label">Rule Title</label>
+                                    <input type="text" id="ruleTitle" class="form-control" placeholder="e.g., Don't chase pumps" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="ruleDescription" class="form-label">Rule Description</label>
+                                    <textarea id="ruleDescription" class="form-control" rows="3" placeholder="Detailed description of the rule..."></textarea>
+                                </div>
+                                <button type="submit" class="btn btn--primary">Save Rule</button>
+                                <button type="button" class="btn btn--outline" id="cancelEditRuleBtn" style="display:none;">Cancel Edit</button>
+                            </form>
                         </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn--outline" onclick="app.hideRuleModal()">Cancel</button>
-                    <button class="btn btn--primary" id="saveRuleBtn">Save Rule</button>
+                    </div>
+                    <div class="card" style="margin-top: 20px;">
+                        <div class="card__header">
+                            <h3>Saved Rules</h3>
+                        </div>
+                        <div class="card__body" id="rulebookListContainer">
+                            <!-- Rules will be loaded here -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
