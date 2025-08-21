@@ -454,11 +454,19 @@
                             <h3>Simple Price Trend Prediction</h3>
                         </div>
                         <div class="card__body">
-                            <p>Enter a stock symbol (e.g., AAPL, RELIANCE.BSE) to get a simple trend prediction based on its 20-day moving average.</p>
-                            <form id="predictionForm" class="form-grid" style="grid-template-columns: 1fr auto; align-items: flex-end; gap: 16px;">
+                            <p>Select an asset type and enter a symbol to get a trend prediction based on its 20-day moving average.</p>
+                            <form id="predictionForm" class="form-grid" style="grid-template-columns: 1fr 1fr auto; align-items: flex-end; gap: 16px;">
                                 <div class="form-group" style="margin-bottom: 0;">
-                                    <label for="predictionTicker" class="form-label">Stock Ticker</label>
-                                    <input type="text" id="predictionTicker" class="form-control" placeholder="Enter symbol...">
+                                    <label for="assetType" class="form-label">Asset Type</label>
+                                    <select id="assetType" class="form-control">
+                                        <option value="stock" selected>Stock</option>
+                                        <option value="crypto">Crypto</option>
+                                        <option value="forex">Forex</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="predictionTicker" class="form-label">Ticker / Symbol</label>
+                                    <input type="text" id="predictionTicker" class="form-control" placeholder="e.g., AAPL, BTC, EURUSD">
                                 </div>
                                 <button type="submit" class="btn btn--primary">Get Prediction</button>
                             </form>
