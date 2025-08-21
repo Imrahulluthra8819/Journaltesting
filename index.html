@@ -10,7 +10,6 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <!-- TradingView Charting Library -->
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 </head>
 <body>
@@ -83,11 +82,9 @@
                         <h2 style="margin: 0;">TraderLog</h2>
                     </div>
                 </div>
-                <!-- Hamburger Menu Button -->
                 <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
                     <span class="hamburger"></span>
                 </button>
-                <!-- Collapsible Navigation Content -->
                 <div class="nav-collapse" id="navCollapse">
                     <ul class="nav-menu">
                         <li class="nav-item"><button class="nav-link active" data-section="dashboard">Dashboard</button></li>
@@ -119,13 +116,10 @@
                                 <option value="₹">INR (₹)</option>
                                 <option value="$">USD ($)</option>
                             </select>
-                            <!-- "My Rulebook" button added here -->
-                            <button class="btn btn--secondary" id="showRulebookBtn">My Rulebook</button>
                             <button class="btn btn--primary" id="quickAddTrade">+ Add New Trade</button>
                         </div>
                     </div>
 
-                    <!-- News Ticker Container -->
                     <div id="newsTickerContainer" class="news-ticker-container"></div>
 
                     <div class="stats-grid">
@@ -136,7 +130,6 @@
                     </div>
 
                     <div class="dashboard-main-grid">
-                        <!-- Left Column -->
                         <div class="dashboard-col-left">
                             <div id="plCard" class="card">
                                 <div class="card__header">
@@ -163,7 +156,6 @@
                             </div>
                         </div>
 
-                        <!-- Right Column -->
                         <div class="dashboard-col-right">
                             <div class="confidence-tracker card">
                                 <div class="card__body">
@@ -225,7 +217,6 @@
                                         <div class="form-group"><label class="form-label">Stop Loss</label><input type="number" name="stopLoss" class="form-control" placeholder="Stop loss price" step="0.01" min="0"></div>
                                         <div class="form-group"><label class="form-label">Target Price</label><input type="number" name="targetPrice" class="form-control" placeholder="Target price" step="0.01" min="0"></div>
                                         
-                                        <!-- === STRATEGY DROPDOWN (UPDATED) === -->
                                         <div class="form-group">
                                             <label class="form-label">Strategy</label>
                                             <select name="strategy" id="addTradeStrategySelect" class="form-control">
@@ -250,13 +241,10 @@
                                             </select>
                                         </div>
                                         
-                                        <!-- This is the new input field, hidden by default -->
                                         <div class="form-group hidden" id="otherStrategyGroup">
                                             <label class="form-label">Please specify strategy</label>
                                             <input type="text" name="other_strategy" class="form-control" placeholder="Enter your custom strategy">
                                         </div>
-                                        <!-- === END OF STRATEGY SECTION === -->
-
                                         <div class="form-group"><label class="form-label">Exit Reason</label><select name="exitReason" class="form-control"><option value="">Select Exit Reason</option><option value="Target Hit">Target Hit</option><option value="SL Hit">Stop Loss Hit</option><option value="Manual Exit">Manual Exit</option><option value="Time Based Exit">Time Based Exit</option><option value="Breakeven">Breakeven</option><option value="Trailing Stop">Trailing Stop</option></select></div>
                                         <div class="form-group"><label class="form-label">Confidence Level (1-10)</label><input type="range" name="confidenceLevel" class="range-input" min="1" max="10" value="5"><div class="range-value">5</div></div>
                                         <div class="form-group"><label class="form-label">Entry Date *</label><input type="datetime-local" name="entryDate" class="form-control" required><div class="form-error" id="entryDate-error"></div></div>
@@ -306,19 +294,6 @@
                                                 </div>
                                                 <div class="form-group"><label class="form-label">Market Session</label><select name="marketSession" class="form-control"><option value="">Select</option><option>Pre-market</option><option>Market Open (9:30-10:30)</option><option>Mid-morning (10:30-12:00)</option><option>Lunch (12:00-14:00)</option><option>Afternoon (14:00-15:30)</option><option>Market Close (15:30-16:00)</option><option>After-hours</option></select></div>
                                                 <div class="form-group"><label class="form-label">Trade Catalyst</label><select name="tradeCatalyst" class="form-control"><option value="">Select</option><option>Technical breakout</option><option>Earnings</option><option>News event</option><option>Sector rotation</option><option>Market reversal</option><option>Momentum follow-through</option><option>Other</option></select></div>
-                                            </div>
-                                        </div>
-                                    </details>
-                                    
-                                    <!-- Rulebook Check section added here -->
-                                    <details class="collapse-card">
-                                        <summary>Rulebook Check</summary>
-                                        <div class="collapse-content">
-                                            <div class="form-group full-width">
-                                                <label class="form-label">Which rules did you follow for this trade?</label>
-                                                <div id="rulebookChecklist" class="checkbox-group">
-                                                    <!-- Checkboxes will be dynamically inserted here -->
-                                                </div>
                                             </div>
                                         </div>
                                     </details>
@@ -405,7 +380,6 @@
                 </div>
             </section>
             
-            <!-- New Notes Section -->
             <section id="notes" class="section">
                 <div class="container">
                     <div class="section-header">
@@ -425,8 +399,7 @@
                             <h3>Past Notes</h3>
                         </div>
                         <div id="notesHistoryContainer" class="card__body">
-                            <!-- Notes will be loaded here -->
-                        </div>
+                            </div>
                     </div>
                 </div>
             </section>
@@ -458,31 +431,15 @@
                 <div class="container">
                     <div class="section-header"><h1>Reports & Calendar</h1><button class="btn btn--primary" id="exportData">Export to CSV</button></div>
                     <div class="calendar-section card"><div class="card__header"><h3>P&L Calendar</h3><div class="calendar-nav"><button class="btn btn--outline btn--sm" id="prevMonth">‹</button><span id="currentMonth">July 2025</span><button class="btn btn--outline btn--sm" id="nextMonth">›</button></div></div><div class="card__body"><div id="plCalendar" class="pl-calendar"></div><div class="calendar-legend"><div class="legend-item"><div class="legend-color profit-high"></div><span>High Profit (>₹1000)</span></div><div class="legend-item"><div class="legend-color profit-low"></div><span>Profit</span></div><div class="legend-item"><div class="legend-color no-trades"></div><span>No Trades</span></div><div class="legend-item"><div class="legend-color loss-low"></div><span>Loss</span></div><div class="legend-item"><div class="legend-color loss-high"></div><span>High Loss (<-₹1000)</span></div></div></div></div>
-                    <div class="reports-grid">
-                        <div class="report-card card"><div class="card__body"><h3>Weekly Summary</h3><div id="weeklyReport"><div class="loading">Generating weekly report...</div></div></div></div>
-                        <div class="report-card card"><div class="card__body"><h3>Monthly Analysis</h3><div id="monthlyReport"><div class="loading">Generating monthly report...</div></div></div></div>
-                        <div class="report-card card"><div class="card__body"><h3>Strategy Performance</h3><div id="strategyReport"><div class="loading">Analyzing strategies...</div></div></div></div>
-                        <div class="report-card card"><div class="card__body"><h3>Emotional Patterns</h3><div id="emotionalReport"><div class="loading">Analyzing emotional patterns...</div></div></div></div>
-                        <!-- Rulebook Report card added here -->
-                        <div class="report-card card">
-                            <div class="card__body">
-                                <h3>Rulebook Adherence</h3>
-                                <div id="rulebookReport">
-                                    <div class="loading">Generating rulebook report...</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <div class="reports-grid"><div class="report-card card"><div class="card__body"><h3>Weekly Summary</h3><div id="weeklyReport"><div class="loading">Generating weekly report...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Monthly Analysis</h3><div id="monthlyReport"><div class="loading">Generating monthly report...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Strategy Performance</h3><div id="strategyReport"><div class="loading">Analyzing strategies...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Emotional Patterns</h3><div id="emotionalReport"><div class="loading">Analyzing emotional patterns...</div></div></div></div></div>
                 </div>
             </section>
 
-            <!-- New Charts Section -->
             <section id="charts" class="section">
                 <div class="container">
                     <div class="section-header">
                         <h1>Live Market Charts</h1>
                     </div>
-                    <!-- TradingView Advanced Chart Widget Container -->
                     <div class="tradingview-widget-container" style="height: 75vh; width: 100%;">
                       <div id="tradingview_chart_widget" style="height: calc(100% - 32px); width: 100%;"></div>
                       <div class="tradingview-widget-copyright">
@@ -491,13 +448,30 @@
                           </a>
                       </div>
                     </div>
-                </div>
+                    
+                    <div class="card" style="margin-top: 24px;">
+                        <div class="card__header">
+                            <h3>Simple Price Trend Prediction</h3>
+                        </div>
+                        <div class="card__body">
+                            <p>Enter a stock symbol (e.g., AAPL, RELIANCE.BSE) to get a simple trend prediction based on its 20-day moving average.</p>
+                            <form id="predictionForm" class="form-grid" style="grid-template-columns: 1fr auto; align-items: flex-end; gap: 16px;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="predictionTicker" class="form-label">Stock Ticker</label>
+                                    <input type="text" id="predictionTicker" class="form-control" placeholder="Enter symbol...">
+                                </div>
+                                <button type="submit" class="btn btn--primary">Get Prediction</button>
+                            </form>
+                            <div id="predictionResult" style="margin-top: 20px; min-height: 50px;">
+                                </div>
+                        </div>
+                    </div>
+                    </div>
             </section>
 
         </main>
         <div id="tradeModal" class="modal hidden"><div class="modal-content"><div class="modal-header"><h2>Trade Details</h2><button class="modal-close" onclick="app.hideTradeModal()">&times;</button></div><div class="modal-body" id="tradeModalBody"></div><div class="modal-footer"><button class="btn btn--outline" onclick="app.hideTradeModal()">Close</button><button class="btn btn--primary" id="editTradeBtn">Edit Trade</button></div></div></div>
         
-        <!-- Note Modal -->
         <div id="noteModal" class="modal hidden">
             <div class="modal-content">
                 <div class="modal-header">
@@ -505,8 +479,7 @@
                     <button class="modal-close" onclick="app.hideNoteModal()">&times;</button>
                 </div>
                 <div class="modal-body" id="noteModalBody">
-                    <!-- Note content will be injected here by JavaScript -->
-                </div>
+                    </div>
                 <div class="modal-footer">
                     <button class="btn btn--outline" onclick="app.hideNoteModal()">Close</button>
                     <button class="btn btn--primary" id="saveNoteChangesBtn">Save Changes</button>
@@ -514,50 +487,8 @@
             </div>
         </div>
 
-        <!-- Rulebook Modal added here -->
-        <div id="rulebookModal" class="modal hidden">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2>My Rulebook</h2>
-                    <button class="modal-close" onclick="app.hideRulebookModal()">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div class="card">
-                        <div class="card__header"><h3>Add/Edit Rule</h3></div>
-                        <div class="card__body">
-                            <form id="rulebookForm">
-                                <input type="hidden" id="ruleId" name="ruleId">
-                                <div class="form-group">
-                                    <label for="ruleTitle" class="form-label">Rule Title</label>
-                                    <input type="text" id="ruleTitle" name="ruleTitle" class="form-control" placeholder="e.g., Don't chase trades" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="ruleDescription" class="form-label">Rule Description</label>
-                                    <textarea id="ruleDescription" name="ruleDescription" class="form-control" rows="3" placeholder="Detailed description of the rule"></textarea>
-                                </div>
-                                <div class="form-actions" style="text-align: right; display: flex; gap: 8px; justify-content: flex-end;">
-                                    <button type="button" id="cancelEditRuleBtn" class="btn btn--outline hidden">Cancel</button>
-                                    <button type="submit" class="btn btn--primary">Save Rule</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                    <div class="card" style="margin-top: 24px;">
-                        <div class="card__header"><h3>Saved Rules</h3></div>
-                        <div id="ruleListContainer" class="card__body">
-                            <!-- Rules will be loaded here -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
     </div>
-    <!-- ======================================================= -->
-    <!-- CHAT WIDGET                                             -->
-    <!-- ======================================================= -->
     <div id="aiChatWidget" class="chat-widget hidden">
-        <!-- Chat Window -->
         <div id="aiChatWindow" class="chat-window hidden">
             <div class="chat-header">
                 <h3>AI Journal Assistant</h3>
@@ -573,7 +504,6 @@
                 <button id="sendChatBtn" class="chat-send-btn">➤</button>
             </div>
         </div>
-        <!-- Chat Bubble -->
         <div id="aiChatBubble" class="chat-bubble">
             🧠
         </div>
