@@ -1,60 +1,78 @@
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
-/**
- * Calculates a Simple Moving Average (SMA) from a list of prices.
- * @param {number[]} prices - An array of closing prices.
- * @param {number} window - The moving average window (e.g., 20 days).
- * @returns {number|null} The latest SMA value or null.
- */
+// Helper function to calculate the Simple Moving Average
 function calculateSma(prices, window) {
     if (!prices || prices.length < window) {
         return null;
     }
-    // Get the most recent 'window' number of prices
     const recentPrices = prices.slice(0, window);
     const sum = recentPrices.reduce((acc, price) => acc + price, 0);
     return sum / window;
 }
 
-/**
- * Netlify serverless function to fetch historical price data and return a simple prediction.
- */
 exports.handler = async function (event) {
-    const { ticker } = event.queryStringParameters;
+    const { ticker, type } = event.queryStringParameters;
     const apiKey = process.env.ALPHA_VANTAGE_KEY;
 
+    // --- Basic validation ---
     if (!apiKey) {
         return {
             statusCode: 500,
-            body: JSON.stringify({ error: "The site owner has not configured the ALPHA_VANTAGE_KEY. This feature is disabled." }),
+            body: JSON.stringify({ error: "API key is not configured by the site owner." }),
         };
     }
-
-    if (!ticker) {
+    if (!ticker || !type) {
         return {
             statusCode: 400,
-            body: JSON.stringify({ error: "A ticker symbol must be provided." }),
+            body: JSON.stringify({ error: "A ticker and asset type must be provided." }),
         };
     }
 
-    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${ticker}&outputsize=compact&apikey=${apiKey}`;
+    let url;
+    let dataKey;
+    let priceKey;
+    let marketCurrency = 'USD'; // Default to USD
+
+    // --- Logic to build the correct API URL based on asset type ---
+    const assetType = type.toLowerCase();
+    if (assetType === 'stock') {
+        url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${ticker}&outputsize=compact&apikey=${apiKey}`;
+        dataKey = "Time Series (Daily)";
+        priceKey = "4. close";
+    } else if (assetType === 'crypto') {
+        // For crypto, we query against a major currency like USD
+        url = `https://www.alphavantage.co/query?function=DIGITAL_CURRENCY_DAILY&symbol=${ticker}&market=USD&apikey=${apiKey}`;
+        dataKey = "Time Series (Digital Currency Daily)";
+        priceKey = "4a. close (USD)";
+    } else if (assetType === 'forex') {
+        if (ticker.length !== 6) {
+            return { statusCode: 400, body: JSON.stringify({ error: "Forex ticker must be a 6-letter pair (e.g., EURUSD)." }) };
+        }
+        const from_symbol = ticker.substring(0, 3);
+        const to_symbol = ticker.substring(3, 6);
+        url = `https://www.alphavantage.co/query?function=FX_DAILY&from_symbol=${from_symbol}&to_symbol=${to_symbol}&outputsize=compact&apikey=${apiKey}`;
+        dataKey = "Time Series FX (Daily)";
+        priceKey = "4. close";
+        marketCurrency = to_symbol.toUpperCase();
+    } else {
+        return { statusCode: 400, body: JSON.stringify({ error: "Invalid asset type specified." }) };
+    }
 
     try {
         const response = await fetch(url);
         const data = await response.json();
 
-        if (data["Error Message"] || !data["Time Series (Daily)"]) {
+        // --- Handle API errors or invalid symbols ---
+        if (data["Error Message"] || !data[dataKey]) {
              return {
                 statusCode: 404,
-                body: JSON.stringify({ error: `Could not find historical data for "${ticker}". Please check the symbol.` }),
+                body: JSON.stringify({ error: `Could not find data for "${ticker}". Please check the symbol and asset type.` }),
             };
         }
 
-        const timeSeries = data["Time Series (Daily)"];
-        // Extract closing prices and convert them to numbers
-        const closingPrices = Object.values(timeSeries).map(day => parseFloat(day["4. close"]));
+        const timeSeries = data[dataKey];
+        const closingPrices = Object.values(timeSeries).map(day => parseFloat(day[priceKey]));
 
-        // Calculate a 20-day SMA for a simple trend prediction
         const prediction = calculateSma(closingPrices, 20);
 
         if (prediction === null) {
@@ -66,14 +84,16 @@ exports.handler = async function (event) {
         
         const lastClose = closingPrices[0];
 
+        // --- Send a successful response ---
         return {
             statusCode: 200,
             body: JSON.stringify({
-                ticker: ticker,
+                ticker: ticker.toUpperCase(),
                 prediction: prediction.toFixed(2),
                 lastClose: lastClose.toFixed(2),
+                currency: marketCurrency,
                 model: "20-Day Simple Moving Average (SMA) Trend",
-                disclaimer: "This is a simple trend indicator based on historical data, not financial advice. It represents the average price of the last 20 days."
+                disclaimer: "This is a simple trend indicator based on historical data, not financial advice."
             }),
         };
 
@@ -81,7 +101,7 @@ exports.handler = async function (event) {
         console.error("Prediction function error:", error);
         return {
             statusCode: 500,
-            body: JSON.stringify({ error: "An unexpected error occurred while fetching the prediction." }),
+            body: JSON.stringify({ error: "An unexpected error occurred." }),
         };
     }
 };
