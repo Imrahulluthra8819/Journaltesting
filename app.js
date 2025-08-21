@@ -225,7 +225,7 @@ class TradingJournalApp {
     document.getElementById('quickAddTrade').addEventListener('click', () => this.showSection('add-trade'));
     document.getElementById('saveConfidenceBtn').addEventListener('click', () => this.saveDailyConfidence());
     document.getElementById('saveNoteBtn').addEventListener('click', () => this.saveNote());
-    document.getElementById('saveNoteChangesBtn').addEventListener('click', () => this.saveNoteChanges()); // Listener for modal save
+    document.getElementById('saveNoteChangesBtn').addEventListener('click', () => this.saveNoteChanges());
     this.setupAddTradeForm();
     document.getElementById('exportData').addEventListener('click', () => this.exportCSV());
     document.getElementById('prevMonth').addEventListener('click', () => this.changeCalendarMonth(-1));
@@ -236,13 +236,11 @@ class TradingJournalApp {
       const activeSection = document.querySelector('.section.active');
       if (activeSection) this.showSection(activeSection.id);
     });
-
-    // START: Added for Price Prediction
+    
     document.getElementById('predictionForm').addEventListener('submit', (e) => {
         e.preventDefault();
         this.handleGetPrediction();
     });
-    // END: Added for Price Prediction
 
     // --- HAMBURGER MENU ---
     const navToggle = document.getElementById('navToggle');
@@ -253,7 +251,6 @@ class TradingJournalApp {
             navCollapse.classList.toggle('active');
         });
 
-        // Close menu when a link is clicked
         navCollapse.querySelectorAll('.nav-link').forEach(link => {
             link.addEventListener('click', () => {
                 navToggle.classList.remove('active');
@@ -313,7 +310,6 @@ class TradingJournalApp {
           document.getElementById('themeToggle').textContent = '🌙';
       }
 
-      // Force reload of widgets if they are visible
       if (document.getElementById('dashboard').classList.contains('active')) {
           this.tickerWidgetLoaded = false;
           this.loadTickerWidget();
@@ -442,7 +438,7 @@ class TradingJournalApp {
 
       const container = document.getElementById('newsTickerContainer');
       if (container) {
-          container.innerHTML = ''; // Clear previous widget
+          container.innerHTML = '';
           container.appendChild(script);
           this.tickerWidgetLoaded = true;
       }
@@ -485,17 +481,14 @@ class TradingJournalApp {
 
     try {
         if (existingNote) {
-            // Update existing note for today
             await this.db.collection('users').doc(this.currentUser.uid).collection('notes').doc(existingNote.id).update({
                 content: content,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-            // Update local state
             const noteIndex = this.allNotes.findIndex(n => n.id === existingNote.id);
             this.allNotes[noteIndex].content = content;
             this.showToast('Note for today updated!', 'success');
         } else {
-            // Add new note for today
             const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('notes').add({
                 date: today,
                 content: content,
@@ -1469,11 +1462,14 @@ class TradingJournalApp {
   }
   // --- END: NEW DASHBOARD CALENDAR METHOD ---
   
-  // START: Added for Price Prediction
+  // --- START: Updated Price Prediction Method ---
   async handleGetPrediction() {
     const tickerInput = document.getElementById('predictionTicker');
+    const assetTypeInput = document.getElementById('assetType');
     const resultDiv = document.getElementById('predictionResult');
+    
     const ticker = tickerInput.value.trim().toUpperCase();
+    const type = assetTypeInput.value;
 
     if (!ticker) {
         resultDiv.innerHTML = `<div class="message warning">Please enter a ticker symbol.</div>`;
@@ -1483,15 +1479,28 @@ class TradingJournalApp {
     resultDiv.innerHTML = `<div class="loading">Fetching prediction for ${ticker}...</div>`;
 
     try {
-        const response = await fetch(`/.netlify/functions/predict-price?ticker=${ticker}`);
+        const response = await fetch(`/.netlify/functions/predict-price?ticker=${ticker}&type=${type}`);
         const data = await response.json();
 
         if (!response.ok) {
-            // Display error message from the backend function
             throw new Error(data.error || 'An unknown error occurred.');
         }
 
-        // Determine if the price is above or below the trend
+        const formatDynamicCurrency = (value, currencyCode) => {
+            const currencySymbols = {
+                USD: '$',
+                INR: '₹',
+                EUR: '€',
+                GBP: '£',
+                JPY: '¥'
+            };
+            const symbol = currencySymbols[currencyCode] || currencyCode + ' ';
+            return `${symbol}${parseFloat(value).toLocaleString()}`;
+        };
+
+        const lastCloseFormatted = formatDynamicCurrency(data.lastClose, data.currency);
+        const predictionFormatted = formatDynamicCurrency(data.prediction, data.currency);
+        
         const trendDirection = parseFloat(data.lastClose) >= parseFloat(data.prediction) ? 'above' : 'below';
         const trendColor = trendDirection === 'above' ? 'positive' : 'negative';
         
@@ -1503,11 +1512,11 @@ class TradingJournalApp {
                 </div>
                 <div class="trade-detail-item">
                     <div class="trade-detail-label">Last Close Price</div>
-                    <div class="trade-detail-value">${this.formatCurrency(parseFloat(data.lastClose))}</div>
+                    <div class="trade-detail-value">${lastCloseFormatted}</div>
                 </div>
                 <div class="trade-detail-item">
                     <div class="trade-detail-label">${data.model}</div>
-                    <div class="trade-detail-value">${this.formatCurrency(parseFloat(data.prediction))}</div>
+                    <div class="trade-detail-value">${predictionFormatted}</div>
                 </div>
             </div>
             <div class="message info" style="margin-top: 16px;">
@@ -1521,7 +1530,7 @@ class TradingJournalApp {
         console.error('Prediction fetch error:', error);
     }
   }
-  // END: Added for Price Prediction
+  // --- END: Updated Price Prediction Method ---
 
   /* ------------------------ EXPORT ------------------------------------- */
   exportCSV() {
