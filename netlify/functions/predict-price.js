@@ -1,6 +1,6 @@
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
-// --- TECHNICAL ANALYSIS CALCULATION HELPERS ---
+// --- TECHNICAL ANALYSIS CALCULATION HELPERS (Unchanged) ---
 
 function calculateSMA(prices, period) {
     if (prices.length < period) return null;
@@ -56,7 +56,6 @@ function calculateBollingerBands(prices, period = 20) {
     return { upper: upper.toFixed(2), middle: middle.toFixed(2), lower: lower.toFixed(2), signal };
 }
 
-// ** MODIFIED to return historical data for the chart **
 function calculateMACD(prices, dates, historyLength = 30) {
     if (prices.length < 26) return null;
     const ema12 = calculateEMA(prices, 12);
@@ -82,77 +81,73 @@ function calculateMACD(prices, dates, historyLength = 30) {
     };
 }
 
+
+// --- MAIN HANDLER ---
 exports.handler = async function (event) {
     const { ticker, type } = event.queryStringParameters;
-    const apiKey = process.env.ALPHA_VANTAGE_KEY;
 
-    if (!apiKey || !ticker || !type) {
-        return { statusCode: 400, body: JSON.stringify({ error: "Missing required parameters." }) };
+    if (!ticker || !type) {
+        return { statusCode: 400, body: JSON.stringify({ error: "Missing ticker or type." }) };
     }
     
+    // --- YAHOO FINANCE TICKER FORMATTING ---
+    let yahooTicker = ticker.toUpperCase();
     const assetType = type.toLowerCase();
-    
+
+    if (assetType === 'stock') {
+        // Append suffixes for Indian stocks if they don't have them
+        if (!yahooTicker.includes('.')) {
+            if (yahooTicker === 'NIFTY_50' || yahooTicker === 'NIFTY 50') yahooTicker = '^NSEI';
+            else if (yahooTicker === 'NIFTY_BANK') yahooTicker = '^NSEBANK';
+            else if (yahooTicker === 'SENSEX') yahooTicker = '^BSESN';
+            else {
+                // Assume NSE for Indian stocks if no exchange is specified
+                yahooTicker = `${yahooTicker}.NS`; 
+            }
+        }
+    } else if (assetType === 'crypto') {
+        yahooTicker = `${yahooTicker}-USD`;
+    } else if (assetType === 'forex') {
+        yahooTicker = `${yahooTicker}=X`;
+    }
+
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooTicker}?region=US&lang=en-US&includePrePost=false&interval=1d&useYfid=true&range=3mo`;
+
     try {
-        let techUrl, dataKey, priceKey, marketCurrency = 'USD';
+        const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const data = await response.json();
 
-        if (assetType === 'stock') {
-            techUrl = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&outputsize=compact&symbol=${ticker}&apikey=${apiKey}`;
-            dataKey = "Time Series (Daily)"; priceKey = "4. close";
-        } else if (assetType === 'crypto') {
-            techUrl = `https://www.alphavantage.co/query?function=DIGITAL_CURRENCY_DAILY&symbol=${ticker}&market=USD&apikey=${apiKey}`;
-            dataKey = "Time Series (Digital Currency Daily)"; priceKey = "4a. close (USD)";
-        } else if (assetType === 'forex') {
-            const from_symbol = ticker.substring(0, 3); const to_symbol = ticker.substring(3, 6);
-            techUrl = `https://www.alphavantage.co/query?function=FX_DAILY&outputsize=compact&from_symbol=${from_symbol}&to_symbol=${to_symbol}&apikey=${apiKey}`;
-            dataKey = "Time Series FX (Daily)"; priceKey = "4. close"; marketCurrency = to_symbol.toUpperCase();
-        } else {
-             return { statusCode: 400, body: JSON.stringify({ error: "Invalid asset type." }) };
+        if (!response.ok || !data.chart?.result?.[0]?.timestamp) {
+            return { statusCode: 404, body: JSON.stringify({ error: `Could not find data for "${ticker}". Please check the symbol and asset type.` }) };
         }
 
-        const techResponse = await fetch(techUrl);
-        const techData = await techResponse.json();
-
-        if (techData.Note || techData["Error Message"] || !techData[dataKey]) {
-            return { statusCode: 400, body: JSON.stringify({ error: `Could not fetch technical data for ${ticker}. (Message: ${techData.Note || techData["Error Message"] || 'Invalid symbol'})` }) };
-        }
-
-        const timeSeries = techData[dataKey];
-        const dates = Object.keys(timeSeries); // Get dates for chart labels
-        const closingPrices = Object.values(timeSeries).map(day => parseFloat(day[priceKey])).reverse();
+        const result = data.chart.result[0];
+        const timestamps = result.timestamp;
+        const quotes = result.indicators.quote[0];
+        const closingPrices = quotes.close.filter(p => p !== null).reverse(); // Oldest first
         const newestPricesFirst = [...closingPrices].reverse();
-
-        // ** UPDATED technical analysis object **
+        const dates = timestamps.map(ts => new Date(ts * 1000).toLocaleDateString('en-GB', {day:'2-digit', month:'short'}));
+        
         const technicalAnalysis = {
             rsi: calculateRSI(closingPrices),
-            macd: calculateMACD(closingPrices, dates), // Pass dates to MACD
+            macd: calculateMACD(closingPrices, dates),
             bollingerBands: calculateBollingerBands(newestPricesFirst),
             ema5: calculateEMA(newestPricesFirst, 5)[0]?.toFixed(2),
             ema9: calculateEMA(newestPricesFirst, 9)[0]?.toFixed(2),
             sma50: calculateSMA(newestPricesFirst, 50)?.toFixed(2),
         };
 
-        let fundamentalAnalysis = null;
-        if (assetType === 'stock') {
-            const fundamentalUrl = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${ticker}&apikey=${apiKey}`;
-            const fundamentalResponse = await fetch(fundamentalUrl);
-            const fundamentalData = await fundamentalResponse.json();
-            if (fundamentalData && !fundamentalData.Note && !fundamentalData["Error Message"] && fundamentalData.Symbol) {
-                 fundamentalAnalysis = {
-                    marketCap: fundamentalData.MarketCapitalization, peRatio: fundamentalData.PERatio, eps: fundamentalData.EPS,
-                    analystTargetPrice: fundamentalData.AnalystTargetPrice, yearHigh: fundamentalData["52WeekHigh"], yearLow: fundamentalData["52WeekLow"],
-                    description: fundamentalData.Description
-                };
-            }
-        }
-
+        // For Yahoo Finance, we don't get a separate fundamental overview in this call,
+        // so we'll just return the technicals.
+        
         return {
             statusCode: 200,
             body: JSON.stringify({
-                ticker: ticker.toUpperCase(),
+                ticker: result.meta.symbol,
                 lastClose: newestPricesFirst[0].toFixed(2),
-                currency: marketCurrency,
+                currency: result.meta.currency,
                 technicalAnalysis,
-                fundamentalAnalysis
+                fundamentalAnalysis: null // No fundamental data from this endpoint
             }),
         };
 
