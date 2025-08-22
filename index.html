@@ -10,16 +10,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <!-- TradingView Charting Library -->
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-    <style>
-        .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; }
-        .report-section { display: flex; flex-direction: column; gap: 8px; }
-        .report-section h4 { margin-bottom: 8px; color: var(--color-primary); border-bottom: 1px solid var(--color-border); padding-bottom: 8px;}
-        .price-chart-container { position: relative; height: 350px; margin-top: 24px; }
-        .forecast-metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px; }
-        @media (max-width: 768px) { .report-grid { grid-template-columns: 1fr; } }
-    </style>
 </head>
 <body>
     <div id="authScreen" class="auth-screen">
@@ -91,11 +82,9 @@
                         <h2 style="margin: 0;">TraderLog</h2>
                     </div>
                 </div>
-                <!-- Hamburger Menu Button -->
                 <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
                     <span class="hamburger"></span>
                 </button>
-                <!-- Collapsible Navigation Content -->
                 <div class="nav-collapse" id="navCollapse">
                     <ul class="nav-menu">
                         <li class="nav-item"><button class="nav-link active" data-section="dashboard">Dashboard</button></li>
@@ -127,11 +116,11 @@
                                 <option value="₹">INR (₹)</option>
                                 <option value="$">USD ($)</option>
                             </select>
+                            <button class="btn btn--secondary" id="showRulebookBtn">My Rulebook</button>
                             <button class="btn btn--primary" id="quickAddTrade">+ Add New Trade</button>
                         </div>
                     </div>
 
-                    <!-- News Ticker Container -->
                     <div id="newsTickerContainer" class="news-ticker-container"></div>
 
                     <div class="stats-grid">
@@ -142,7 +131,6 @@
                     </div>
 
                     <div class="dashboard-main-grid">
-                        <!-- Left Column -->
                         <div class="dashboard-col-left">
                             <div id="plCard" class="card">
                                 <div class="card__header">
@@ -169,7 +157,6 @@
                             </div>
                         </div>
 
-                        <!-- Right Column -->
                         <div class="dashboard-col-right">
                             <div class="confidence-tracker card">
                                 <div class="card__body">
@@ -259,7 +246,6 @@
                                             <label class="form-label">Please specify strategy</label>
                                             <input type="text" name="other_strategy" class="form-control" placeholder="Enter your custom strategy">
                                         </div>
-
                                         <div class="form-group"><label class="form-label">Exit Reason</label><select name="exitReason" class="form-control"><option value="">Select Exit Reason</option><option value="Target Hit">Target Hit</option><option value="SL Hit">Stop Loss Hit</option><option value="Manual Exit">Manual Exit</option><option value="Time Based Exit">Time Based Exit</option><option value="Breakeven">Breakeven</option><option value="Trailing Stop">Trailing Stop</option></select></div>
                                         <div class="form-group"><label class="form-label">Confidence Level (1-10)</label><input type="range" name="confidenceLevel" class="range-input" min="1" max="10" value="5"><div class="range-value">5</div></div>
                                         <div class="form-group"><label class="form-label">Entry Date *</label><input type="datetime-local" name="entryDate" class="form-control" required><div class="form-error" id="entryDate-error"></div></div>
@@ -309,6 +295,17 @@
                                                 </div>
                                                 <div class="form-group"><label class="form-label">Market Session</label><select name="marketSession" class="form-control"><option value="">Select</option><option>Pre-market</option><option>Market Open (9:30-10:30)</option><option>Mid-morning (10:30-12:00)</option><option>Lunch (12:00-14:00)</option><option>Afternoon (14:00-15:30)</option><option>Market Close (15:30-16:00)</option><option>After-hours</option></select></div>
                                                 <div class="form-group"><label class="form-label">Trade Catalyst</label><select name="tradeCatalyst" class="form-control"><option value="">Select</option><option>Technical breakout</option><option>Earnings</option><option>News event</option><option>Sector rotation</option><option>Market reversal</option><option>Momentum follow-through</option><option>Other</option></select></div>
+                                            </div>
+                                        </div>
+                                    </details>
+                                    
+                                    <details class="collapse-card">
+                                        <summary>Rulebook Check</summary>
+                                        <div class="collapse-content">
+                                            <div class="form-group full-width">
+                                                <label class="form-label">Which rules did you follow for this trade?</label>
+                                                <div id="rulebookChecklist" class="checkbox-group">
+                                                    </div>
                                             </div>
                                         </div>
                                     </details>
@@ -413,7 +410,8 @@
                          <div class="card__header">
                             <h3>Past Notes</h3>
                         </div>
-                        <div id="notesHistoryContainer" class="card__body"></div>
+                        <div id="notesHistoryContainer" class="card__body">
+                            </div>
                     </div>
                 </div>
             </section>
@@ -445,7 +443,20 @@
                 <div class="container">
                     <div class="section-header"><h1>Reports & Calendar</h1><button class="btn btn--primary" id="exportData">Export to CSV</button></div>
                     <div class="calendar-section card"><div class="card__header"><h3>P&L Calendar</h3><div class="calendar-nav"><button class="btn btn--outline btn--sm" id="prevMonth">‹</button><span id="currentMonth">July 2025</span><button class="btn btn--outline btn--sm" id="nextMonth">›</button></div></div><div class="card__body"><div id="plCalendar" class="pl-calendar"></div><div class="calendar-legend"><div class="legend-item"><div class="legend-color profit-high"></div><span>High Profit (>₹1000)</span></div><div class="legend-item"><div class="legend-color profit-low"></div><span>Profit</span></div><div class="legend-item"><div class="legend-color no-trades"></div><span>No Trades</span></div><div class="legend-item"><div class="legend-color loss-low"></div><span>Loss</span></div><div class="legend-item"><div class="legend-color loss-high"></div><span>High Loss (<-₹1000)</span></div></div></div></div>
-                    <div class="reports-grid"><div class="report-card card"><div class="card__body"><h3>Weekly Summary</h3><div id="weeklyReport"><div class="loading">Generating weekly report...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Monthly Analysis</h3><div id="monthlyReport"><div class="loading">Generating monthly report...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Strategy Performance</h3><div id="strategyReport"><div class="loading">Analyzing strategies...</div></div></div></div><div class="report-card card"><div class="card__body"><h3>Emotional Patterns</h3><div id="emotionalReport"><div class="loading">Analyzing emotional patterns...</div></div></div></div></div>
+                    <div class="reports-grid">
+                        <div class="report-card card"><div class="card__body"><h3>Weekly Summary</h3><div id="weeklyReport"><div class="loading">Generating weekly report...</div></div></div></div>
+                        <div class="report-card card"><div class="card__body"><h3>Monthly Analysis</h3><div id="monthlyReport"><div class="loading">Generating monthly report...</div></div></div></div>
+                        <div class="report-card card"><div class="card__body"><h3>Strategy Performance</h3><div id="strategyReport"><div class="loading">Analyzing strategies...</div></div></div></div>
+                        <div class="report-card card"><div class="card__body"><h3>Emotional Patterns</h3><div id="emotionalReport"><div class="loading">Analyzing emotional patterns...</div></div></div></div>
+                        <div class="report-card card">
+                            <div class="card__body">
+                                <h3>Rulebook Adherence</h3>
+                                <div id="rulebookReport">
+                                    <div class="loading">Generating rulebook report...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -454,7 +465,7 @@
                     <div class="section-header">
                         <h1>Live Market Charts</h1>
                     </div>
-                    <div class="tradingview-widget-container" style="height: 75vh; width: 100%;">
+                    <div class="tradingview-widget-container" style="height: 60vh; width: 100%;">
                       <div id="tradingview_chart_widget" style="height: calc(100% - 32px); width: 100%;"></div>
                       <div class="tradingview-widget-copyright">
                           <a href="https://www.tradingview.com/" rel="noopener nofollow" target="_blank">
@@ -462,65 +473,68 @@
                           </a>
                       </div>
                     </div>
-                    
-                    <div class="card" style="margin-top: 24px;">
-                        <div class="card__header"><h3>Price Action Analysis & Projections</h3></div>
-                        <div class="card__body">
-                            <p>Select an asset type and enter a symbol to generate a detailed analysis report.</p>
-                            <form id="predictionForm" class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: flex-end; gap: 16px;">
-                                <div class="form-group" style="margin-bottom: 0;">
-                                    <label for="assetType" class="form-label">Asset Type</label>
-                                    <select id="assetType" class="form-control">
-                                        <option value="stock" selected>Stock</option>
-                                        <option value="crypto">Crypto</option>
-                                        <option value="forex">Forex</option>
-                                    </select>
+
+                    <div class="forecast-container" style="margin-top: var(--space-32);">
+                        <div class="card">
+                            <div class="card__header forecast-header">
+                                <h3 id="forecastTitle">Bitcoin Price Forecast</h3>
+                                <div class="forecast-controls">
+                                    <div class="form-group">
+                                        <label for="forecastAsset" class="form-label sr-only">Asset</label>
+                                        <select id="forecastAsset" class="form-control">
+                                            <option>Bitcoin</option>
+                                            <option>Ethereum</option>
+                                            <option>NIFTY</option>
+                                            <option>AAPL</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="forecastTimeframe" class="form-label sr-only">Timeframe</label>
+                                        <select id="forecastTimeframe" class="form-control">
+                                            <option>5 minutes</option>
+                                            <option>15 minutes</option>
+                                            <option>1 hour</option>
+                                            <option>4 hours</option>
+                                            <option>1 day</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="forecastSteps" class="form-label sr-only">Steps</label>
+                                        <select id="forecastSteps" class="form-control">
+                                            <option>25</option>
+                                            <option>50</option>
+                                            <option>100</option>
+                                        </select>
+                                    </div>
+                                    <button class="btn btn--primary" id="runForecastBtn">Run Forecast</button>
                                 </div>
-                                <div class="form-group" style="margin-bottom: 0;">
-                                    <label for="popularSymbols" class="form-label">Popular Symbols</label>
-                                    <select id="popularSymbols" class="form-control">
-                                        <option value="" selected>-- Select or Type --</option>
-                                        <optgroup label="Indian Indexes">
-                                            <option value="NIFTY_50" data-type="stock">NIFTY 50</option>
-                                            <option value="NIFTY_BANK" data-type="stock">NIFTY BANK</option>
-                                            <option value="SENSEX" data-type="stock">SENSEX</option>
-                                        </optgroup>
-                                        <optgroup label="Indian Stocks">
-                                            <option value="RELIANCE.NS" data-type="stock">Reliance (NSE)</option>
-                                            <option value="TCS.NS" data-type="stock">TCS (NSE)</option>
-                                            <option value="HDFCBANK.NS" data-type="stock">HDFC Bank (NSE)</option>
-                                            <option value="INFY.NS" data-type="stock">Infosys (NSE)</option>
-                                        </optgroup>
-                                        <optgroup label="US Stocks">
-                                            <option value="AAPL" data-type="stock">Apple (AAPL)</option>
-                                            <option value="MSFT" data-type="stock">Microsoft (MSFT)</option>
-                                            <option value="GOOGL" data-type="stock">Google (GOOGL)</option>
-                                            <option value="TSLA" data-type="stock">Tesla (TSLA)</option>
-                                        </optgroup>
-                                        <optgroup label="Cryptocurrencies">
-                                            <option value="BTC" data-type="crypto">Bitcoin (BTC)</option>
-                                            <option value="ETH" data-type="crypto">Ethereum (ETH)</option>
-                                            <option value="SOL" data-type="crypto">Solana (SOL)</option>
-                                        </optgroup>
-                                        <optgroup label="Forex Pairs">
-                                            <option value="EURUSD" data-type="forex">EUR/USD</option>
-                                            <option value="GBPUSD" data-type="forex">GBP/USD</option>
-                                            <option value="USDJPY" data-type="forex">USD/JPY</option>
-                                        </optgroup>
-                                    </select>
-                                </div>
-                                <div class="form-group" style="margin-bottom: 0;">
-                                    <label for="predictionTicker" class="form-label">Custom Ticker</label>
-                                    <input type="text" id="predictionTicker" class="form-control" placeholder="e.g., TATAMOTORS.NS">
-                                </div>
-                                <button type="submit" class="btn btn--primary">Get Report</button>
-                            </form>
-                            <div id="predictionResult" style="margin-top: 20px; min-height: 50px;">
-                                <!-- Prediction results will be displayed here -->
                             </div>
                         </div>
+                        
+                        <div class="card" style="margin-top: var(--space-24);">
+                            <div class="card__header">
+                                <h3>Aurora Price Forecast</h3>
+                            </div>
+                            <div class="card__body">
+                                <div class="chart-container" style="height: 350px;">
+                                    <canvas id="forecastChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="forecast-metrics-container" style="margin-top: var(--space-24);">
+                            <h3>Aurora Forecast Metrics</h3>
+                            <div id="auroraMetrics" class="forecast-metrics-grid">
+                                </div>
+                        </div>
+
+                        <div class="forecast-metrics-container" style="margin-top: var(--space-32);">
+                            <h3>Sentinel Forecast Metrics</h3>
+                            <div id="sentinelMetrics" class="forecast-metrics-grid">
+                                </div>
+                        </div>
                     </div>
-                </div>
+                    </div>
             </section>
 
         </main>
@@ -532,10 +546,47 @@
                     <h2>Note Details</h2>
                     <button class="modal-close" onclick="app.hideNoteModal()">&times;</button>
                 </div>
-                <div class="modal-body" id="noteModalBody"></div>
+                <div class="modal-body" id="noteModalBody">
+                    </div>
                 <div class="modal-footer">
                     <button class="btn btn--outline" onclick="app.hideNoteModal()">Close</button>
                     <button class="btn btn--primary" id="saveNoteChangesBtn">Save Changes</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="rulebookModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>My Rulebook</h2>
+                    <button class="modal-close" onclick="app.hideRulebookModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="card">
+                        <div class="card__header"><h3>Add/Edit Rule</h3></div>
+                        <div class="card__body">
+                            <form id="rulebookForm">
+                                <input type="hidden" id="ruleId" name="ruleId">
+                                <div class="form-group">
+                                    <label for="ruleTitle" class="form-label">Rule Title</label>
+                                    <input type="text" id="ruleTitle" name="ruleTitle" class="form-control" placeholder="e.g., Don't chase trades" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="ruleDescription" class="form-label">Rule Description</label>
+                                    <textarea id="ruleDescription" name="ruleDescription" class="form-control" rows="3" placeholder="Detailed description of the rule"></textarea>
+                                </div>
+                                <div class="form-actions" style="text-align: right; display: flex; gap: 8px; justify-content: flex-end;">
+                                    <button type="button" id="cancelEditRuleBtn" class="btn btn--outline hidden">Cancel</button>
+                                    <button type="submit" class="btn btn--primary">Save Rule</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="card" style="margin-top: 24px;">
+                        <div class="card__header"><h3>Saved Rules</h3></div>
+                        <div id="ruleListContainer" class="card__body">
+                            </div>
+                    </div>
                 </div>
             </div>
         </div>
