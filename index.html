@@ -465,7 +465,7 @@
                     <div class="section-header">
                         <h1>Live Market Charts</h1>
                     </div>
-                    <div class="tradingview-widget-container" style="height: 60vh; width: 100%;">
+                    <div class="tradingview-widget-container" style="height: 75vh; width: 100%;">
                       <div id="tradingview_chart_widget" style="height: calc(100% - 32px); width: 100%;"></div>
                       <div class="tradingview-widget-copyright">
                           <a href="https://www.tradingview.com/" rel="noopener nofollow" target="_blank">
@@ -474,64 +474,49 @@
                       </div>
                     </div>
 
-                    <div class="forecast-container" style="margin-top: var(--space-32);">
-                        <div class="card">
-                            <div class="card__header forecast-header">
-                                <h3 id="forecastTitle">Bitcoin Price Forecast</h3>
-                                <div class="forecast-controls">
-                                    <div class="form-group">
-                                        <label for="forecastAsset" class="form-label sr-only">Asset</label>
-                                        <select id="forecastAsset" class="form-control">
-                                            <option>Bitcoin</option>
-                                            <option>Ethereum</option>
-                                            <option>NIFTY</option>
-                                            <option>AAPL</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="forecastTimeframe" class="form-label sr-only">Timeframe</label>
-                                        <select id="forecastTimeframe" class="form-control">
-                                            <option>5 minutes</option>
-                                            <option>15 minutes</option>
-                                            <option>1 hour</option>
-                                            <option>4 hours</option>
-                                            <option>1 day</option>
-                                        </select>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="forecastSteps" class="form-label sr-only">Steps</label>
-                                        <select id="forecastSteps" class="form-control">
-                                            <option>25</option>
-                                            <option>50</option>
-                                            <option>100</option>
-                                        </select>
-                                    </div>
-                                    <button class="btn btn--primary" id="runForecastBtn">Run Forecast</button>
-                                </div>
-                            </div>
+                    <div class="forecast-container card">
+                        <div class="card__header">
+                            <h3 id="forecastTitle">AI Price Forecast</h3>
                         </div>
-                        
-                        <div class="card" style="margin-top: var(--space-24);">
-                            <div class="card__header">
-                                <h3>Aurora Price Forecast</h3>
-                            </div>
-                            <div class="card__body">
-                                <div class="chart-container" style="height: 350px;">
-                                    <canvas id="forecastChart"></canvas>
+                        <div class="card__body">
+                            <div class="forecast-controls">
+                                <div class="form-group">
+                                    <label class="form-label">Asset</label>
+                                    <input type="text" id="forecastSymbol" class="form-control" placeholder="e.g., BTC-USD, RELIANCE.NS">
                                 </div>
+                                <div class="form-group">
+                                    <label class="form-label">Timeframe</label>
+                                    <select id="forecastTimeframe" class="form-control">
+                                        <option value="1d">1 Day</option>
+                                        <option value="1wk">1 Week</option>
+                                        <option value="1mo">1 Month</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Steps</label>
+                                    <select id="forecastSteps" class="form-control">
+                                        <option value="10">10 Steps</option>
+                                        <option value="25" selected>25 Steps</option>
+                                        <option value="50">50 Steps</option>
+                                    </select>
+                                </div>
+                                <button id="getForecastBtn" class="btn btn--primary">Forecast</button>
                             </div>
-                        </div>
 
-                        <div class="forecast-metrics-container" style="margin-top: var(--space-24);">
-                            <h3>Aurora Forecast Metrics</h3>
-                            <div id="auroraMetrics" class="forecast-metrics-grid">
-                                </div>
-                        </div>
+                            <div id="forecastChartContainer" class="chart-container" style="height: 400px; margin-top: 24px; display: none;">
+                                <canvas id="forecastChartCanvas"></canvas>
+                            </div>
 
-                        <div class="forecast-metrics-container" style="margin-top: var(--space-32);">
-                            <h3>Sentinel Forecast Metrics</h3>
-                            <div id="sentinelMetrics" class="forecast-metrics-grid">
+                            <div id="forecastMetricsContainer" class="forecast-metrics-container" style="display: none;">
+                                <div class="card__header" style="padding-left: 0; padding-right: 0;">
+                                    <h3>AI Forecast Metrics</h3>
                                 </div>
+                                <div id="forecastMetricsGrid" class="forecast-metrics-grid">
+                                    </div>
+                            </div>
+                            <div id="forecastInitialMessage" class="empty-state">
+                                Enter a symbol and click "Forecast" to generate an AI-powered prediction.
+                            </div>
                         </div>
                     </div>
                     </div>
