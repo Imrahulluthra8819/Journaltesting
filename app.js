@@ -22,9 +22,10 @@ class TradingJournalApp {
     this.allTrades = [];
     this.allConfidence = [];
     this.allNotes = [];
-    this.currentEditingNoteId = null; // To track the note being edited
+    this.allRules = []; // New state for Rulebook
+    this.currentEditingNoteId = null; 
     this.charts = {};
-    this.momentumChart = null; // To manage the new analysis chart instance
+    this.forecastChart = null; // New property for forecast chart
     this.mainListenersAttached = false;
     this.currentCalendarDate = new Date();
     this.currencySymbol = '₹'; // Default to INR
@@ -60,8 +61,10 @@ class TradingJournalApp {
         this.allTrades = [];
         this.allConfidence = [];
         this.allNotes = [];
+        this.allRules = [];
         Object.values(this.charts).forEach(chart => chart?.destroy());
         this.charts = {};
+        if (this.forecastChart) this.forecastChart.destroy(); // Clean up forecast chart on logout
         this.showAuthScreen();
         document.getElementById('aiChatWidget')?.classList.add('hidden');
       }
@@ -178,20 +181,25 @@ class TradingJournalApp {
     const tradesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('trades').orderBy('entryDate', 'desc').get();
     const confidenceQuery = this.db.collection('users').doc(this.currentUser.uid).collection('confidence').orderBy('date', 'desc').get();
     const notesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('notes').orderBy('date', 'desc').get();
+    const rulesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('rules').orderBy('createdAt', 'desc').get(); // New query for rules
     try {
-      const [tradesSnapshot, confidenceSnapshot, notesSnapshot] = await Promise.all([tradesQuery, confidenceQuery, notesQuery]);
+      const [tradesSnapshot, confidenceSnapshot, notesSnapshot, rulesSnapshot] = await Promise.all([tradesQuery, confidenceQuery, notesQuery, rulesQuery]);
       this.allTrades = tradesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       console.log(`[DATA] Loaded ${this.allTrades.length} trades.`);
       this.allConfidence = confidenceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       console.log(`[DATA] Loaded ${this.allConfidence.length} confidence entries.`);
       this.allNotes = notesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       console.log(`[DATA] Loaded ${this.allNotes.length} notes.`);
+      this.allRules = rulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      console.log(`[DATA] Loaded ${this.allRules.length} rules.`);
+
     } catch (error) {
       console.error("[DATA] Error loading user data:", error);
       this.showToast(`Error loading data: ${error.message}`, 'error');
       this.allTrades = [];
       this.allConfidence = [];
       this.allNotes = [];
+      this.allRules = [];
     }
   }
 
@@ -226,7 +234,7 @@ class TradingJournalApp {
     document.getElementById('quickAddTrade').addEventListener('click', () => this.showSection('add-trade'));
     document.getElementById('saveConfidenceBtn').addEventListener('click', () => this.saveDailyConfidence());
     document.getElementById('saveNoteBtn').addEventListener('click', () => this.saveNote());
-    document.getElementById('saveNoteChangesBtn').addEventListener('click', () => this.saveNoteChanges());
+    document.getElementById('saveNoteChangesBtn').addEventListener('click', () => this.saveNoteChanges()); // Listener for modal save
     this.setupAddTradeForm();
     document.getElementById('exportData').addEventListener('click', () => this.exportCSV());
     document.getElementById('prevMonth').addEventListener('click', () => this.changeCalendarMonth(-1));
@@ -238,22 +246,14 @@ class TradingJournalApp {
       if (activeSection) this.showSection(activeSection.id);
     });
     
-    // --- ANALYSIS REPORT LISTENERS ---
-    document.getElementById('predictionForm').addEventListener('submit', (e) => {
+    // --- RULEBOOK LISTENERS ---
+    document.getElementById('showRulebookBtn').addEventListener('click', () => this.showRulebookModal());
+    const rulebookForm = document.getElementById('rulebookForm');
+    rulebookForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        this.handleGetPrediction();
+        this.saveRule();
     });
-    
-    const popularSymbolsSelect = document.getElementById('popularSymbols');
-    popularSymbolsSelect.addEventListener('change', () => {
-        const selectedOption = popularSymbolsSelect.options[popularSymbolsSelect.selectedIndex];
-        const ticker = selectedOption.value;
-        const type = selectedOption.dataset.type;
-        if (ticker) {
-            document.getElementById('predictionTicker').value = ticker;
-            document.getElementById('assetType').value = type;
-        }
-    });
+    document.getElementById('cancelEditRuleBtn').addEventListener('click', () => this.resetRulebookForm());
 
 
     // --- HAMBURGER MENU ---
@@ -265,6 +265,7 @@ class TradingJournalApp {
             navCollapse.classList.toggle('active');
         });
 
+        // Close menu when a link is clicked
         navCollapse.querySelectorAll('.nav-link').forEach(link => {
             link.addEventListener('click', () => {
                 navToggle.classList.remove('active');
@@ -304,6 +305,9 @@ class TradingJournalApp {
         }
       });
     }
+    
+    // --- NEW FORECAST LISTENER ---
+    document.getElementById('getForecastBtn').addEventListener('click', () => this.getForecast());
   }
 
   updateUserInfo() {
@@ -324,6 +328,7 @@ class TradingJournalApp {
           document.getElementById('themeToggle').textContent = '🌙';
       }
 
+      // Force reload of widgets if they are visible
       if (document.getElementById('dashboard').classList.contains('active')) {
           this.tickerWidgetLoaded = false;
           this.loadTickerWidget();
@@ -427,6 +432,7 @@ class TradingJournalApp {
   
   loadTickerWidget() {
       if (this.tickerWidgetLoaded && document.getElementById('tradingview-ticker-widget-script')) return;
+
       const theme = document.documentElement.getAttribute('data-color-scheme') === 'light' ? 'light' : 'dark';
       const script = document.createElement('script');
       script.id = 'tradingview-ticker-widget-script';
@@ -434,16 +440,29 @@ class TradingJournalApp {
       script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js';
       script.async = true;
       script.innerHTML = JSON.stringify({
-          "symbols": [{"description": "SENSEX", "proName": "BSE:SENSEX"}, {"description": "NIFTY 50", "proName": "NSE:NIFTY"}, {"description": "S&P 500", "proName": "FOREXCOM:SPXUSD"}, {"description": "NASDAQ 100", "proName": "FOREXCOM:NSXUSD"}, {"description": "BTC/USD", "proName": "BITSTAMP:BTCUSD"}, {"description": "ETH/USD", "proName": "BITSTAMP:ETHUSD"}],
-          "showSymbolLogo": true, "colorTheme": theme, "isTransparent": true, "displayMode": "adaptive", "locale": "in"
+          "symbols": [
+              { "description": "SENSEX", "proName": "BSE:SENSEX" },
+              { "description": "NIFTY 50", "proName": "NSE:NIFTY" },
+              { "description": "S&P 500", "proName": "FOREXCOM:SPXUSD" },
+              { "description": "NASDAQ 100", "proName": "FOREXCOM:NSXUSD" },
+              { "description": "BTC/USD", "proName": "BITSTAMP:BTCUSD" },
+              { "description": "ETH/USD", "proName": "BITSTAMP:ETHUSD" }
+          ],
+          "showSymbolLogo": true,
+          "colorTheme": theme,
+          "isTransparent": true,
+          "displayMode": "adaptive",
+          "locale": "in"
       });
+
       const container = document.getElementById('newsTickerContainer');
       if (container) {
-          container.innerHTML = '';
+          container.innerHTML = ''; // Clear previous widget
           container.appendChild(script);
           this.tickerWidgetLoaded = true;
       }
   }
+
 
   async saveDailyConfidence() {
     const level = parseInt(document.getElementById('dailyConfidence').value, 10);
@@ -455,7 +474,9 @@ class TradingJournalApp {
     }
     try {
       const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('confidence').add({
-        date: today, level: level, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        date: today,
+        level: level,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       this.allConfidence.unshift({ id: docRef.id, date: today, level });
       document.getElementById('confidenceMessage').innerHTML = "<div class='message success'>Daily confidence recorded successfully!</div>";
@@ -470,20 +491,30 @@ class TradingJournalApp {
   
   async saveNote() {
     const content = document.getElementById('dailyNoteContent').value.trim();
-    if (!content) { this.showToast("Note content cannot be empty.", 'warning'); return; }
+    if (!content) {
+        this.showToast("Note content cannot be empty.", 'warning');
+        return;
+    }
     const today = new Date().toISOString().split('T')[0];
     const existingNote = this.allNotes.find(note => note.date === today);
+
     try {
         if (existingNote) {
+            // Update existing note for today
             await this.db.collection('users').doc(this.currentUser.uid).collection('notes').doc(existingNote.id).update({
-                content: content, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                content: content,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
+            // Update local state
             const noteIndex = this.allNotes.findIndex(n => n.id === existingNote.id);
             this.allNotes[noteIndex].content = content;
             this.showToast('Note for today updated!', 'success');
         } else {
+            // Add new note for today
             const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('notes').add({
-                date: today, content: content, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                date: today,
+                content: content,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
             this.allNotes.unshift({ id: docRef.id, date: today, content: content });
             this.showToast('Note saved successfully!', 'success');
@@ -491,29 +522,49 @@ class TradingJournalApp {
         document.dispatchEvent(new CustomEvent('data-changed'));
     } catch (error) {
         this.showToast(`Error saving note: ${error.message}`, 'error');
+        console.error("[DATA] Error saving note:", error);
     }
   }
 
   renderNotes() {
     const today = new Date().toISOString().split('T')[0];
     const todayNote = this.allNotes.find(note => note.date === today);
-    document.getElementById('dailyNoteContent').value = todayNote ? todayNote.content : '';
+    const noteContentEl = document.getElementById('dailyNoteContent');
+    
+    noteContentEl.value = todayNote ? todayNote.content : '';
+
     const historyContainer = document.getElementById('notesHistoryContainer');
     if (this.allNotes.length === 0) {
         historyContainer.innerHTML = '<div class="empty-state">You have not written any notes yet.</div>';
         return;
     }
+
     historyContainer.innerHTML = this.allNotes.map(note => {
         const notePreview = note.content.substring(0, 100) + (note.content.length > 100 ? '...' : '');
-        return `<div class="note-item clickable" onclick="app.showNoteDetails('${note.id}')"><div class="note-header"><h4 class="note-date">${new Date(note.date).toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h4></div><div class="note-content"><p>${notePreview.replace(/\n/g, '<br>')}</p></div></div>`
-    }).join('');
+        return `
+        <div class="note-item clickable" onclick="app.showNoteDetails('${note.id}')">
+            <div class="note-header">
+                <h4 class="note-date">${new Date(note.date).toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h4>
+            </div>
+            <div class="note-content">
+                <p>${notePreview.replace(/\n/g, '<br>')}</p>
+            </div>
+        </div>
+    `}).join('');
   }
 
   showNoteDetails(noteId) {
     const note = this.allNotes.find(n => n.id === noteId);
     if (!note) return;
+
     this.currentEditingNoteId = noteId;
-    document.getElementById('noteModalBody').innerHTML = `<div class="form-group"><label class="form-label">Note for ${new Date(note.date).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</label><textarea id="editNoteContent" class="form-control" rows="12">${note.content}</textarea></div>`;
+    const modalBody = document.getElementById('noteModalBody');
+    modalBody.innerHTML = `
+        <div class="form-group">
+            <label class="form-label">Note for ${new Date(note.date).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</label>
+            <textarea id="editNoteContent" class="form-control" rows="12">${note.content}</textarea>
+        </div>
+    `;
     document.getElementById('noteModal').classList.remove('hidden');
   }
 
@@ -524,20 +575,133 @@ class TradingJournalApp {
 
   async saveNoteChanges() {
     if (!this.currentEditingNoteId) return;
+
     const newContent = document.getElementById('editNoteContent').value.trim();
-    if (!newContent) { this.showToast('Note content cannot be empty.', 'warning'); return; }
+    if (!newContent) {
+        this.showToast('Note content cannot be empty.', 'warning');
+        return;
+    }
+
     try {
         await this.db.collection('users').doc(this.currentUser.uid).collection('notes').doc(this.currentEditingNoteId).update({
-            content: newContent, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            content: newContent,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
+
         const noteIndex = this.allNotes.findIndex(n => n.id === this.currentEditingNoteId);
-        if (noteIndex > -1) this.allNotes[noteIndex].content = newContent;
+        if (noteIndex > -1) {
+            this.allNotes[noteIndex].content = newContent;
+        }
+
         this.showToast('Note updated successfully!', 'success');
         this.hideNoteModal();
         document.dispatchEvent(new CustomEvent('data-changed'));
     } catch (error) {
         this.showToast(`Error updating note: ${error.message}`, 'error');
+        console.error("[DATA] Error updating note:", error);
     }
+  }
+  
+  /* ----------------------- RULEBOOK SECTION ------------------------------ */
+  showRulebookModal() {
+      document.getElementById('rulebookModal').classList.remove('hidden');
+      this.resetRulebookForm();
+      this.renderRulebook();
+  }
+
+  hideRulebookModal() {
+      document.getElementById('rulebookModal').classList.add('hidden');
+  }
+
+  renderRulebook() {
+      const container = document.getElementById('ruleListContainer');
+      if (this.allRules.length === 0) {
+          container.innerHTML = '<div class="empty-state">You have not added any rules yet.</div>';
+          return;
+      }
+      container.innerHTML = this.allRules.map(rule => `
+          <div class="rule-item">
+              <div class="rule-content">
+                  <h4 class="rule-title">${rule.title}</h4>
+                  <p class="rule-description">${rule.description}</p>
+              </div>
+              <div class="rule-actions">
+                  <button class="btn btn--outline btn--sm" onclick="app.editRule('${rule.id}')">Edit</button>
+                  <button class="btn btn--danger btn--sm" onclick="app.deleteRule('${rule.id}')">Delete</button>
+              </div>
+          </div>
+      `).join('');
+  }
+
+  async saveRule() {
+      const form = document.getElementById('rulebookForm');
+      const ruleId = form.ruleId.value;
+      const title = form.ruleTitle.value.trim();
+      const description = form.ruleDescription.value.trim();
+
+      if (!title) {
+          this.showToast('Rule title cannot be empty.', 'warning');
+          return;
+      }
+
+      const ruleData = {
+          title,
+          description,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      try {
+          if (ruleId) { // Editing existing rule
+              await this.db.collection('users').doc(this.currentUser.uid).collection('rules').doc(ruleId).update(ruleData);
+              const index = this.allRules.findIndex(r => r.id === ruleId);
+              this.allRules[index] = { ...this.allRules[index], ...ruleData };
+              this.showToast('Rule updated successfully!', 'success');
+          } else { // Adding new rule
+              ruleData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+              const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('rules').add(ruleData);
+              this.allRules.unshift({ id: docRef.id, ...ruleData });
+              this.showToast('Rule added successfully!', 'success');
+          }
+          this.resetRulebookForm();
+          this.renderRulebook();
+          document.dispatchEvent(new CustomEvent('data-changed'));
+      } catch (error) {
+          this.showToast(`Error saving rule: ${error.message}`, 'error');
+          console.error("[DATA] Error saving rule:", error);
+      }
+  }
+
+  editRule(ruleId) {
+      const rule = this.allRules.find(r => r.id === ruleId);
+      if (!rule) return;
+      
+      const form = document.getElementById('rulebookForm');
+      form.ruleId.value = rule.id;
+      form.ruleTitle.value = rule.title;
+      form.ruleDescription.value = rule.description;
+      
+      document.getElementById('cancelEditRuleBtn').classList.remove('hidden');
+  }
+
+  async deleteRule(ruleId) {
+      // In a real app, a confirmation modal is better. For this implementation, we delete directly.
+      try {
+          await this.db.collection('users').doc(this.currentUser.uid).collection('rules').doc(ruleId).delete();
+          this.allRules = this.allRules.filter(r => r.id !== ruleId);
+          this.renderRulebook();
+          this.showToast('Rule deleted.', 'info');
+          document.dispatchEvent(new CustomEvent('data-changed'));
+      } catch (error) {
+          this.showToast(`Error deleting rule: ${error.message}`, 'error');
+          console.error("[DATA] Error deleting rule:", error);
+      }
+  }
+
+  resetRulebookForm() {
+      const form = document.getElementById('rulebookForm');
+      form.reset();
+      form.ruleId.value = '';
+      document.getElementById('cancelEditRuleBtn').classList.add('hidden');
   }
 
   /* ----------------------- ADD TRADE FORM ------------------------------ */
@@ -547,40 +711,76 @@ class TradingJournalApp {
     const exitDateEl = document.querySelector('input[name="exitDate"]');
     if (entryDateEl) entryDateEl.value = now.toISOString().slice(0, 16);
     if (exitDateEl) exitDateEl.value = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 16);
+    this.renderRulebookChecklist(); // Render rules in the form
+  }
+  
+  renderRulebookChecklist() {
+      const container = document.getElementById('rulebookChecklist');
+      if (!container) return;
+
+      if (this.allRules.length === 0) {
+          container.innerHTML = '<p class="empty-state-sm">No rules defined. Go to "My Rulebook" to add some.</p>';
+          return;
+      }
+
+      container.innerHTML = this.allRules.map(rule => `
+          <label title="${rule.description}">
+              <input type="checkbox" name="followedRules" value="${rule.title}"> ${rule.title}
+          </label>
+      `).join('');
   }
 
   setupAddTradeForm() {
     const form = document.getElementById('addTradeForm');
     form.querySelectorAll('.range-input').forEach(slider => {
       const display = slider.parentElement.querySelector('.range-value');
-      if (display) slider.addEventListener('input', () => (display.textContent = slider.value));
+      if (display) {
+        slider.addEventListener('input', () => (display.textContent = slider.value));
+      }
     });
     const calcFields = ['quantity', 'entryPrice', 'exitPrice', 'stopLoss', 'targetPrice', 'direction'];
-    calcFields.forEach(name => form.querySelector(`[name="${name}"]`)?.addEventListener('input', () => this.updateCalculations()));
-    form.addEventListener('submit', e => { e.preventDefault(); this.submitTrade(); });
+    calcFields.forEach(name => {
+      form.querySelector(`[name="${name}"]`)?.addEventListener('input', () => this.updateCalculations());
+    });
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      this.submitTrade();
+    });
     document.getElementById('resetTradeForm').addEventListener('click', () => {
-      form.reset(); this.updateCalculations(); this.renderAddTrade();
+      form.reset();
+      this.updateCalculations();
+      this.renderAddTrade();
       form.querySelectorAll('.range-value').forEach(el => el.textContent = '5');
       document.getElementById('otherStrategyGroup').classList.add('hidden');
     });
+
     const strategySelect = document.getElementById('addTradeStrategySelect');
     const otherStrategyGroup = document.getElementById('otherStrategyGroup');
     if (strategySelect && otherStrategyGroup) {
         strategySelect.addEventListener('change', function() {
-            otherStrategyGroup.classList.toggle('hidden', this.value !== 'Other');
+            if (this.value === 'Other') {
+                otherStrategyGroup.classList.remove('hidden');
+            } else {
+                otherStrategyGroup.classList.add('hidden');
+            }
         });
     }
   }
 
   updateCalculations() {
     const fd = new FormData(document.getElementById('addTradeForm'));
-    const qty = parseFloat(fd.get('quantity')) || 0, entry = parseFloat(fd.get('entryPrice')) || 0, exit = parseFloat(fd.get('exitPrice')) || 0;
-    const sl = parseFloat(fd.get('stopLoss')) || 0, target = parseFloat(fd.get('targetPrice')) || 0, dir = fd.get('direction');
+    const qty = parseFloat(fd.get('quantity')) || 0;
+    const entry = parseFloat(fd.get('entryPrice')) || 0;
+    const exit = parseFloat(fd.get('exitPrice')) || 0;
+    const sl = parseFloat(fd.get('stopLoss')) || 0;
+    const target = parseFloat(fd.get('targetPrice')) || 0;
+    const dir = fd.get('direction');
     let gross = (qty && entry && exit) ? (dir === 'Long' ? (exit - entry) * qty : (entry - exit) * qty) : 0;
     const net = gross - 40;
     let riskReward = 0;
     if (qty && entry && sl && target && dir) {
-      const risk = Math.abs(entry - sl), reward = Math.abs(target - entry);
+      const risk = Math.abs(entry - sl);
+      const reward = Math.abs(target - entry);
       if (risk > 0) riskReward = reward / risk;
     }
     document.getElementById('calcGrossPL').textContent = this.formatCurrency(gross);
@@ -600,67 +800,128 @@ class TradingJournalApp {
   async submitTrade() {
     const form = document.getElementById('addTradeForm');
     const fd = new FormData(form);
-    if (!this.currentUser) { this.showToast('You must be logged in.', 'error'); return; }
+    form.querySelectorAll('.form-error').forEach(e => e.classList.remove('active'));
+    if (!this.currentUser) {
+      this.showToast('You must be logged in to add a trade.', 'error');
+      return;
+    }
 
     let finalStrategy = fd.get('strategy');
     if (finalStrategy === 'Other') {
-        finalStrategy = fd.get('other_strategy').trim() || 'Other (unspecified)';
+        const customStrategy = fd.get('other_strategy').trim();
+        finalStrategy = customStrategy || 'Other (unspecified)';
     }
 
     const trade = {
-      symbol: fd.get('symbol').toUpperCase(), direction: fd.get('direction'), quantity: parseFloat(fd.get('quantity')), entryPrice: parseFloat(fd.get('entryPrice')),
-      exitPrice: parseFloat(fd.get('exitPrice')), stopLoss: parseFloat(fd.get('stopLoss')) || null, targetPrice: parseFloat(fd.get('targetPrice')) || null,
-      strategy: finalStrategy, exitReason: fd.get('exitReason') || 'N/A', confidenceLevel: parseInt(fd.get('confidenceLevel')), entryDate: fd.get('entryDate'),
-      exitDate: fd.get('exitDate'), preEmotion: fd.get('preEmotion') || '', postEmotion: fd.get('postEmotion') || '', notes: fd.get('notes') || '',
-      sleepQuality: parseInt(fd.get('sleepQuality')) || 5, physicalCondition: parseInt(fd.get('physicalCondition')) || 5, marketSentiment: fd.get('marketSentiment') || '',
-      newsAwareness: fd.get('newsAwareness') || '', marketEnvironment: fd.get('marketEnvironment') || '', fomoLevel: parseInt(fd.get('fomoLevel')) || 1,
-      preStress: parseInt(fd.get('preStress')) || 1, multiTimeframes: this.getCheckboxValues(form, 'multiTimeframes'), volumeAnalysis: fd.get('volumeAnalysis') || '',
-      technicalConfluence: this.getCheckboxValues(form, 'technicalConfluence'), marketSession: fd.get('marketSession') || '', tradeCatalyst: fd.get('tradeCatalyst') || '',
-      waitedForSetup: this.getRadioValue(form, 'waitedForSetup'), positionComfort: parseInt(fd.get('positionComfort')) || 5, planDeviation: fd.get('planDeviation') || '',
-      stressDuring: parseInt(fd.get('stressDuring')) || 1, primaryExitReason: fd.get('primaryExitReason') || '', exitEmotion: fd.get('exitEmotion') || '',
-      wouldTakeAgain: this.getRadioValue(form, 'wouldTakeAgain'), lesson: fd.get('lesson') || '', volatilityToday: fd.get('volatilityToday') || '',
-      sectorPerformance: fd.get('sectorPerformance') || '', economicEvents: this.getCheckboxValues(form, 'economicEvents'), personalDistractions: this.getCheckboxValues(form, 'personalDistractions'),
+      symbol: fd.get('symbol').toUpperCase(),
+      direction: fd.get('direction'),
+      quantity: parseFloat(fd.get('quantity')),
+      entryPrice: parseFloat(fd.get('entryPrice')),
+      exitPrice: parseFloat(fd.get('exitPrice')),
+      stopLoss: parseFloat(fd.get('stopLoss')) || null,
+      targetPrice: parseFloat(fd.get('targetPrice')) || null,
+      strategy: finalStrategy,
+      exitReason: fd.get('exitReason') || 'N/A',
+      confidenceLevel: parseInt(fd.get('confidenceLevel')),
+      entryDate: fd.get('entryDate'),
+      exitDate: fd.get('exitDate'),
+      preEmotion: fd.get('preEmotion') || '',
+      postEmotion: fd.get('postEmotion') || '',
+      notes: fd.get('notes') || '',
+      sleepQuality: parseInt(fd.get('sleepQuality')) || 5,
+      physicalCondition: parseInt(fd.get('physicalCondition')) || 5,
+      marketSentiment: fd.get('marketSentiment') || '',
+      newsAwareness: fd.get('newsAwareness') || '',
+      marketEnvironment: fd.get('marketEnvironment') || '',
+      fomoLevel: parseInt(fd.get('fomoLevel')) || 1,
+      preStress: parseInt(fd.get('preStress')) || 1,
+      multiTimeframes: this.getCheckboxValues(form, 'multiTimeframes'),
+      volumeAnalysis: fd.get('volumeAnalysis') || '',
+      technicalConfluence: this.getCheckboxValues(form, 'technicalConfluence'),
+      marketSession: fd.get('marketSession') || '',
+      tradeCatalyst: fd.get('tradeCatalyst') || '',
+      waitedForSetup: this.getRadioValue(form, 'waitedForSetup'),
+      positionComfort: parseInt(fd.get('positionComfort')) || 5,
+      planDeviation: fd.get('planDeviation') || '',
+      stressDuring: parseInt(fd.get('stressDuring')) || 1,
+      primaryExitReason: fd.get('primaryExitReason') || '',
+      exitEmotion: fd.get('exitEmotion') || '',
+      wouldTakeAgain: this.getRadioValue(form, 'wouldTakeAgain'),
+      lesson: fd.get('lesson') || '',
+      volatilityToday: fd.get('volatilityToday') || '',
+      sectorPerformance: fd.get('sectorPerformance') || '',
+      economicEvents: this.getCheckboxValues(form, 'economicEvents'),
+      personalDistractions: this.getCheckboxValues(form, 'personalDistractions'),
+      followedRules: this.getCheckboxValues(form, 'followedRules'), // Save followed rules
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     trade.grossPL = trade.direction === 'Long' ? (trade.exitPrice - trade.entryPrice) * trade.quantity : (trade.entryPrice - trade.exitPrice) * trade.quantity;
     trade.netPL = trade.grossPL - 40;
     if (trade.stopLoss && trade.targetPrice) {
-      const risk = Math.abs(trade.entryPrice - trade.stopLoss), reward = Math.abs(trade.targetPrice - trade.entryPrice);
+      const risk = Math.abs(trade.entryPrice - trade.stopLoss);
+      const reward = Math.abs(trade.targetPrice - trade.entryPrice);
       trade.riskRewardRatio = risk ? reward / risk : 0;
-    } else { trade.riskRewardRatio = 0; }
+    } else {
+      trade.riskRewardRatio = 0;
+    }
     try {
       const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('trades').add(trade);
       this.allTrades.unshift({ id: docRef.id, ...trade });
-      this.showToast('Trade saved!', 'success');
-      form.reset(); this.updateCalculations(); this.renderAddTrade();
+      this.showToast('Trade saved successfully!', 'success');
+      form.reset();
+      this.updateCalculations();
+      this.renderAddTrade();
       document.getElementById('otherStrategyGroup').classList.add('hidden');
       document.dispatchEvent(new CustomEvent('data-changed'));
       this.showSection('dashboard');
     } catch (error) {
-      this.showToast(`Error: ${error.message}`, 'error');
+      console.error('[DATA] Firestore insert error:', error);
+      this.showToast(`Error saving trade: ${error.message}`, 'error');
     }
   }
 
   /* ---------------------------- HISTORY ------------------------------- */
   renderHistory() {
     const container = document.getElementById('historyContent');
-    if (this.trades.length === 0) { container.innerHTML = '<div class="empty-state">No trades recorded.</div>'; return; }
+    if (this.trades.length === 0) {
+      container.innerHTML = '<div class="empty-state">No trades recorded yet.</div>';
+      return;
+    }
     const symbols = [...new Set(this.trades.map(t => t.symbol))];
     const symbolFilter = document.getElementById('symbolFilter');
     symbolFilter.innerHTML = '<option value="">All Symbols</option>' + symbols.map(s => `<option value="${s}">${s}</option>`).join('');
+    
     const strategies = [...new Set(this.trades.map(t => t.strategy))];
+
     const strategyFilter = document.getElementById('strategyFilter');
     strategyFilter.innerHTML = '<option value="">All Strategies</option>' + strategies.map(s => `<option value="${s}">${s}</option>`).join('');
     const applyFilters = () => {
-      const symVal = symbolFilter.value, stratVal = strategyFilter.value;
+      const symVal = symbolFilter.value;
+      const stratVal = strategyFilter.value;
       const filtered = this.trades.filter(t => (!symVal || t.symbol === symVal) && (!stratVal || t.strategy === stratVal));
       renderTable(filtered);
     };
     symbolFilter.onchange = strategyFilter.onchange = applyFilters;
     const renderTable = rows => {
-      if (rows.length === 0) { container.innerHTML = '<div class="empty-state">No trades match filter.</div>'; return; }
-      container.innerHTML = `<div class="card"><table class="trade-table"><thead><tr><th>Date</th><th>Symbol</th><th>Dir</th><th>Qty</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Strategy</th></tr></thead><tbody>
-          ${rows.map(t => `<tr onclick="app.showTradeDetails('${t.id}')"><td>${this.formatDate(t.entryDate)}</td><td>${t.symbol}</td><td><span class="trade-direction ${t.direction.toLowerCase()}">${t.direction}</span></td><td>${t.quantity}</td><td>${this.formatCurrency(t.entryPrice)}</td><td>${this.formatCurrency(t.exitPrice)}</td><td class="${t.netPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(t.netPL)}</td><td>${t.strategy}</td></tr>`).join('')}
+      if (rows.length === 0) {
+        container.innerHTML = '<div class="empty-state">No trades match filter.</div>';
+        return;
+      }
+      container.innerHTML = `
+        <div class="card"><table class="trade-table"><thead>
+          <tr><th>Date</th><th>Symbol</th><th>Dir</th><th>Qty</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Strategy</th></tr>
+        </thead><tbody>
+          ${rows.map(t => `
+            <tr onclick="app.showTradeDetails('${t.id}')">
+              <td data-label="Date">${this.formatDate(t.entryDate)}</td>
+              <td data-label="Symbol">${t.symbol}</td>
+              <td data-label="Direction"><span class="trade-direction ${t.direction.toLowerCase()}">${t.direction}</span></td>
+              <td data-label="Qty">${t.quantity}</td>
+              <td data-label="Entry">${this.formatCurrency(t.entryPrice)}</td>
+              <td data-label="Exit">${this.formatCurrency(t.exitPrice)}</td>
+              <td data-label="P&L" class="${t.netPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(t.netPL)}</td>
+              <td data-label="Strategy">${t.strategy}</td>
+            </tr>`).join('')}
         </tbody></table></div>`;
     };
     applyFilters();
@@ -671,49 +932,110 @@ class TradingJournalApp {
     const t = this.trades.find(tr => tr.id === id);
     if (!t) return;
     const rrText = t.riskRewardRatio ? t.riskRewardRatio.toFixed(2) : '0.00';
-    document.getElementById('tradeModalBody').innerHTML = `<div class="trade-detail-grid">
+    
+    // Generate HTML for followed rules
+    let followedRulesHtml = '';
+    if (t.followedRules && t.followedRules.length > 0) {
+        followedRulesHtml = `
+            <div style="margin-top:16px;">
+                <strong>Followed Rules:</strong>
+                <ul style="padding-left: 20px; margin-top: 8px;">
+                    ${t.followedRules.map(rule => `<li>${rule}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    }
+
+    const body = document.getElementById('tradeModalBody');
+    body.innerHTML = `<div class="trade-detail-grid">
       <div class="trade-detail-item"><div class="trade-detail-label">Symbol</div><div class="trade-detail-value">${t.symbol}</div></div>
       <div class="trade-detail-item"><div class="trade-detail-label">Direction</div><div class="trade-detail-value"><span class="trade-direction ${t.direction.toLowerCase()}">${t.direction}</span></div></div>
       <div class="trade-detail-item"><div class="trade-detail-label">Quantity</div><div class="trade-detail-value">${t.quantity}</div></div>
       <div class="trade-detail-item"><div class="trade-detail-label">Entry Price</div><div class="trade-detail-value">${this.formatCurrency(t.entryPrice)}</div></div>
       <div class="trade-detail-item"><div class="trade-detail-label">Exit Price</div><div class="trade-detail-value">${this.formatCurrency(t.exitPrice)}</div></div>
+      <div class="trade-detail-item"><div class="trade-detail-label">Gross P&L</div><div class="trade-detail-value ${t.grossPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(t.grossPL)}</div></div>
       <div class="trade-detail-item"><div class="trade-detail-label">Net P&L</div><div class="trade-detail-value ${t.netPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(t.netPL)}</div></div>
       <div class="trade-detail-item"><div class="trade-detail-label">Risk:Reward</div><div class="trade-detail-value">1:${rrText}</div></div>
       <div class="trade-detail-item"><div class="trade-detail-label">Strategy</div><div class="trade-detail-value">${t.strategy}</div></div>
+      <div class="trade-detail-item"><div class="trade-detail-label">Sleep Quality</div><div class="trade-detail-value">${t.sleepQuality || 'N/A'}/10</div></div>
+      <div class="trade-detail-item"><div class="trade-detail-label">Pre-Stress</div><div class="trade-detail-value">${t.preStress || 'N/A'}/10</div></div>
+      <div class="trade-detail-item"><div class="trade-detail-label">FOMO Level</div><div class="trade-detail-value">${t.fomoLevel || 'N/A'}/10</div></div>
     </div>
     ${t.notes ? `<div style="margin-top:16px;"><strong>Notes:</strong><p>${t.notes}</p></div>` : ''}
-    ${t.lesson ? `<div style="margin-top:16px;"><strong>Lesson Learned:</strong><p>${t.lesson}</p></div>` : ''}`;
+    ${t.lesson ? `<div style="margin-top:16px;"><strong>Lesson Learned:</strong><p>${t.lesson}</p></div>` : ''}
+    ${followedRulesHtml}`;
     document.getElementById('tradeModal').classList.remove('hidden');
   }
 
   hideTradeModal() { document.getElementById('tradeModal').classList.add('hidden'); }
-
-  /* ---------------------- DASHBOARD HELPERS ----------------------------- */
+  /* ---------------------- NEW DASHBOARD HELPERS ----------------------------- */
   drawDashboardPLChart() {
     const ctx = document.getElementById('dashboardPlChart');
     if (!ctx) return;
-    this.charts.dashboardPl?.destroy();
+    if (this.charts.dashboardPl) {
+      this.charts.dashboardPl.destroy();
+    }
     if (this.trades.length < 2) {
       const context = ctx.getContext('2d');
       context.clearRect(0, 0, ctx.width, ctx.height);
-      context.fillStyle = 'grey'; context.textAlign = 'center';
+      context.fillStyle = 'grey';
+      context.textAlign = 'center';
       context.fillText('Need at least 2 trades to show a curve.', ctx.width / 2, ctx.height / 2);
       return;
     }
     const sorted = [...this.trades].sort((a, b) => new Date(a.entryDate) - new Date(b.entryDate));
     const labels = sorted.map((t, i) => `Trade ${i + 1}`);
-    const data = []; let cumulativePL = 0;
-    sorted.forEach(trade => { cumulativePL += trade.netPL || 0; data.push(cumulativePL); });
+    const data = [];
+    let cumulativePL = 0;
+    sorted.forEach(trade => {
+      cumulativePL += trade.netPL || 0;
+      data.push(cumulativePL);
+    });
     this.charts.dashboardPl = new Chart(ctx, {
-      type: 'line', data: { labels, datasets: [{ label: 'Cumulative P&L', data, borderColor: 'rgba(31, 184, 205, 0.8)', backgroundColor: 'rgba(31, 184, 205, 0.1)', fill: true, tension: 0.4, pointRadius: 0 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: false, ticks: { font: { size: 10 }, callback: (value) => this.formatCurrency(value).replace('.00', '') } }, x: { display: false } } }
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Cumulative P&L',
+          data: data,
+          borderColor: 'rgba(31, 184, 205, 0.8)',
+          backgroundColor: 'rgba(31, 184, 205, 0.1)',
+          fill: true,
+          tension: 0.4,
+          pointRadius: 0,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: false
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: false,
+            ticks: {
+              font: { size: 10 },
+              callback: (value) => this.formatCurrency(value).replace('.00', '')
+            }
+          },
+          x: {
+            display: false
+          }
+        }
+      }
     });
   }
 
   renderDashboardAIFeedback() {
     const container = document.getElementById('dashboardAiFeedback');
     if (!container) return;
-    if (this.trades.length < 3) { container.innerHTML = '<div class="empty-state">Add more trades for AI feedback.</div>'; return; }
+    if (this.trades.length < 3) {
+      container.innerHTML = '<div class="empty-state">Add more trades for AI feedback.</div>';
+      return;
+    }
     container.innerHTML = this.generateAIFeedback();
   }
 
@@ -730,7 +1052,10 @@ class TradingJournalApp {
     document.getElementById('analyticsAvgRR').textContent = s.avgRR;
     if (typeof Chart === 'undefined') return;
     setTimeout(() => {
-      this.drawPLChart(); this.drawRRChart(); this.drawStrategyChart(); this.renderTimeTables();
+      this.drawPLChart();
+      this.drawRRChart();
+      this.drawStrategyChart();
+      this.renderTimeTables();
     }, 50);
   }
 
@@ -818,14 +1143,35 @@ class TradingJournalApp {
   /* ----------------------- CHARTS SECTION ----------------------------- */
   renderCharts() {
       if (this.chartsWidgetLoaded || typeof TradingView === 'undefined') return;
+  
       const widgetContainer = document.getElementById('tradingview_chart_widget');
       if (!widgetContainer) return;
+  
       widgetContainer.innerHTML = '';
+  
       const theme = document.documentElement.getAttribute('data-color-scheme') === 'light' ? 'light' : 'dark';
+  
       new TradingView.widget({
-          "autosize": true, "symbol": "NSE:NIFTY", "interval": "D", "timezone": "Asia/Kolkata", "theme": theme, "style": "1", "locale": "in",
-          "enable_publishing": false, "allow_symbol_change": true, "details": true, "hotlist": true, "calendar": true,
-          "watchlist": ["NSE:NIFTY", "NSE:BANKNIFTY", "NSE:RELIANCE", "NSE:HDFCBANK", "FX:EURUSD", "BITSTAMP:BTCUSD"],
+          "autosize": true,
+          "symbol": "NSE:NIFTY",
+          "interval": "D",
+          "timezone": "Asia/Kolkata",
+          "theme": theme,
+          "style": "1",
+          "locale": "in",
+          "enable_publishing": false,
+          "allow_symbol_change": true,
+          "details": true,
+          "hotlist": true,
+          "calendar": true,
+          "watchlist": [
+            "NSE:NIFTY",
+            "NSE:BANKNIFTY",
+            "NSE:RELIANCE",
+            "NSE:HDFCBANK",
+            "FX:EURUSD",
+            "BITSTAMP:BTCUSD"
+          ],
           "container_id": "tradingview_chart_widget"
       });
       this.chartsWidgetLoaded = true;
@@ -887,6 +1233,7 @@ class TradingJournalApp {
     document.getElementById('monthlyReport').innerHTML = this.generateMonthlyReport();
     document.getElementById('strategyReport').innerHTML = this.generateStrategyReport();
     document.getElementById('emotionalReport').innerHTML = this.generateEmotionalReport();
+    document.getElementById('rulebookReport').innerHTML = this.generateRulebookReport(); // New report
   }
 
   changeCalendarMonth(offset) {
@@ -1044,6 +1391,51 @@ class TradingJournalApp {
       <div class="report-item"><span>Least Profitable Emotion:</span><span>${leastProfitable.emotion} (${this.formatCurrency(leastProfitable.avg)}/trade)</span></div>
     `;
   }
+  
+  generateRulebookReport() {
+      if (this.allRules.length === 0) {
+          return '<div class="empty-state">No rules defined in your rulebook.</div>';
+      }
+      if (this.allTrades.length === 0) {
+          return '<div class="empty-state">No trades recorded to analyze rule adherence.</div>';
+      }
+
+      const ruleStats = {};
+      this.allRules.forEach(rule => {
+          ruleStats[rule.title] = { followed: 0 };
+      });
+
+      this.allTrades.forEach(trade => {
+          if (trade.followedRules && Array.isArray(trade.followedRules)) {
+              trade.followedRules.forEach(ruleTitle => {
+                  if (ruleStats[ruleTitle]) {
+                      ruleStats[ruleTitle].followed++;
+                  }
+              });
+          }
+      });
+
+      let table = '<table class="report-table"><thead><tr><th>Rule</th><th>Followed</th><th>Adherence</th></tr></thead><tbody>';
+      const totalTrades = this.allTrades.length;
+      
+      for (const title in ruleStats) {
+          const { followed } = ruleStats[title];
+          const adherence = totalTrades > 0 ? Math.round((followed / totalTrades) * 100) : 0;
+          table += `
+              <tr>
+                  <td>${title}</td>
+                  <td>${followed} / ${totalTrades}</td>
+                  <td>
+                      <div class="progress-bar">
+                          <div class="progress-bar-fill" style="width: ${adherence}%;">${adherence}%</div>
+                      </div>
+                  </td>
+              </tr>
+          `;
+      }
+      table += '</tbody></table>';
+      return table;
+  }
 
   generateAIFeedback() {
     const stats = this.calculateStats();
@@ -1143,9 +1535,9 @@ class TradingJournalApp {
     }
     const totalPL = trades.reduce((sum, t) => sum + (t.netPL || 0), 0);
     const wins = trades.filter(t => t.netPL > 0).length;
-    const winRate = trades.length > 0 ? Math.round((wins / this.trades.length) * 100) : 0;
-    const bestTrade = Math.max(0, ...this.trades.map(t => t.netPL));
-    const worstTrade = Math.min(0, ...this.trades.map(t => t.netPL));
+    const winRate = trades.length > 0 ? Math.round((wins / trades.length) * 100) : 0;
+    const bestTrade = Math.max(0, ...trades.map(t => t.netPL));
+    const worstTrade = Math.min(0, ...trades.map(t => t.netPL));
     return { totalPL, winRate, totalTrades: trades.length, bestTrade, worstTrade };
   }
   
@@ -1273,100 +1665,126 @@ class TradingJournalApp {
   }
   // --- END: NEW DASHBOARD CALENDAR METHOD ---
   
-  // --- START: Updated Price Prediction Method ---
-  async handleGetPrediction() {
-    const tickerInput = document.getElementById('predictionTicker');
-    const assetTypeInput = document.getElementById('assetType');
-    const resultDiv = document.getElementById('predictionResult');
-    
-    const ticker = tickerInput.value.trim().toUpperCase();
-    const type = assetTypeInput.value;
+  // --- START: NEW FORECAST METHODS ---
+  async getForecast() {
+      const symbol = document.getElementById('forecastSymbol').value.trim();
+      const timeframe = document.getElementById('forecastTimeframe').value;
+      const steps = document.getElementById('forecastSteps').value;
+      const initialMsg = document.getElementById('forecastInitialMessage');
+      const chartContainer = document.getElementById('forecastChartContainer');
+      const metricsContainer = document.getElementById('forecastMetricsContainer');
+      const forecastTitle = document.getElementById('forecastTitle');
 
-    if (!ticker) {
-        resultDiv.innerHTML = `<div class="message warning">Please enter a ticker symbol.</div>`;
-        return;
-    }
+      if (!symbol) {
+          this.showToast("Please enter an asset symbol.", "warning");
+          return;
+      }
 
-    resultDiv.innerHTML = `<div class="loading">Generating detailed analysis for ${ticker}...</div>`;
-    
-    if (this.momentumChart) {
-        this.momentumChart.destroy();
-    }
+      initialMsg.innerHTML = '<div class="loading">Generating AI forecast... This may take a moment.</div>';
+      initialMsg.style.display = 'block';
+      chartContainer.style.display = 'none';
+      metricsContainer.style.display = 'none';
 
-    try {
-        const response = await fetch(`/.netlify/functions/predict-price?ticker=${ticker}&type=${type}`);
-        const data = await response.json();
+      try {
+          const response = await fetch('/.netlify/functions/get-forecast', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ symbol, timeframe, steps, trades: this.allTrades.slice(0, 10) })
+          });
 
-        if (!response.ok) {
-            throw new Error(data.error || 'An unknown error occurred.');
-        }
+          if (!response.ok) {
+              const err = await response.json();
+              throw new Error(err.error || 'Failed to generate forecast.');
+          }
 
-        const formatDynamicCurrency = (value, currencyCode) => {
-            const currencySymbols = { USD: '$', INR: '₹', EUR: '€', GBP: '£', JPY: '¥' };
-            const symbol = currencySymbols[currencyCode] || currencyCode + ' ';
-            return `${symbol}${parseFloat(value).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-        };
+          const data = await response.json();
+          
+          forecastTitle.textContent = `${symbol.toUpperCase()} Price Forecast`;
+          initialMsg.style.display = 'none';
+          chartContainer.style.display = 'block';
+          metricsContainer.style.display = 'block';
+          
+          this.renderForecastChart(data.chartData);
+          this.renderForecastMetrics(data.metrics);
 
-        const ta = data.technicalAnalysis;
-        let technicalHtml = `
-            <div class="report-section">
-                <h4>Technical Analysis (Short-Term)</h4>
-                <div class="trade-detail-item"><div class="trade-detail-label">5-Day EMA</div><div class="trade-detail-value">${formatDynamicCurrency(ta.ema5, data.currency)}</div></div>
-                <div class="trade-detail-item"><div class="trade-detail-label">9-Day EMA</div><div class="trade-detail-value">${formatDynamicCurrency(ta.ema9, data.currency)}</div></div>
-                <div class="trade-detail-item"><div class="trade-detail-label">50-Day SMA</div><div class="trade-detail-value">${formatDynamicCurrency(ta.sma50, data.currency)}</div></div>
-                <div class="trade-detail-item"><div class="trade-detail-label">RSI (14)</div><div class="trade-detail-value">${ta.rsi?.value || 'N/A'} (${ta.rsi?.signal || 'N/A'})</div></div>
-                <div class="trade-detail-item"><div class="trade-detail-label">MACD Signal</div><div class="trade-detail-value">${ta.macd?.analysis || 'N/A'}</div></div>
-            </div>
-        `;
-
-        const fa = data.fundamentalAnalysis;
-        let fundamentalHtml = '';
-        if (fa) {
-             fundamentalHtml = `<div class="report-section"><h4>Fundamental Analysis (Long-Term)</h4><div class="trade-detail-item"><div class="trade-detail-label">P/E Ratio</div><div class="trade-detail-value">${fa.peRatio}</div></div><div class="trade-detail-item"><div class="trade-detail-label">EPS</div><div class="trade-detail-value">${fa.eps}</div></div><div class="trade-detail-item"><div class="trade-detail-label">Market Cap</div><div class="trade-detail-value">${(parseInt(fa.marketCap) / 1000000000).toFixed(2)}B</div></div><div class="trade-detail-item"><div class="trade-detail-label">52-Week High</div><div class="trade-detail-value">${formatDynamicCurrency(fa.yearHigh, data.currency)}</div></div><div class="trade-detail-item"><div class="trade-detail-label">Analyst Target</div><div class="trade-detail-value">${formatDynamicCurrency(fa.analystTargetPrice, data.currency)}</div></div></div>`;
-        } else if (type.toLowerCase() === 'stock') {
-             fundamentalHtml = `<div class="report-section"><h4>Fundamental Analysis (Long-Term)</h4><div class="empty-state">Fundamental data not available.</div></div>`;
-        }
-
-        resultDiv.innerHTML = `
-            <h3>Analysis Report for ${data.ticker}</h3>
-            <p style="color: var(--color-text-secondary); margin-bottom: 16px;">Last Close Price: <strong>${formatDynamicCurrency(data.lastClose, data.currency)}</strong></p>
-            <div class="report-grid">${technicalHtml}${fundamentalHtml}</div>
-            <div class="report-section"><h4 style="margin-top: 16px;">Momentum (MACD Histogram)</h4></div>
-            <div class="momentum-chart-container"><canvas id="momentumChartCanvas"></canvas></div>
-            ${fa?.description ? `<div style="margin-top: 16px;"><p><strong>Company Overview:</strong> ${fa.description.substring(0, 400)}...</p></div>` : ''}
-        `;
-
-        const ctx = document.getElementById('momentumChartCanvas').getContext('2d');
-        const macdHistory = ta.macd.history;
-        this.momentumChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: macdHistory.labels,
-                datasets: [{
-                    label: 'MACD Histogram',
-                    data: macdHistory.data,
-                    backgroundColor: macdHistory.data.map(v => v >= 0 ? 'rgba(16, 185, 129, 0.7)' : 'rgba(239, 68, 68, 0.7)'),
-                    borderColor: macdHistory.data.map(v => v >= 0 ? 'rgb(16, 185, 129)' : 'rgb(239, 68, 68)'),
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: { beginAtZero: true, ticks: { font: { size: 10 } } },
-                    x: { ticks: { font: { size: 10 }, maxRotation: 70, minRotation: 70 } }
-                }
-            }
-        });
-
-    } catch (error) {
-        resultDiv.innerHTML = `<div class="message error"><strong>Error:</strong> ${error.message}</div>`;
-        console.error('Analysis fetch error:', error);
-    }
+      } catch (error) {
+          console.error("Error fetching AI forecast:", error);
+          initialMsg.innerHTML = `<div class="message error">Error: ${error.message}</div>`;
+      }
   }
-  // --- END: Updated Price Prediction Method ---
 
+  renderForecastChart(data) {
+      const ctx = document.getElementById('forecastChartCanvas').getContext('2d');
+      if (this.forecastChart) {
+          this.forecastChart.destroy();
+      }
+
+      const historicalData = data.slice(0, -25);
+      const forecastData = data.slice(-26);
+
+      this.forecastChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+              labels: data.map(d => d.date),
+              datasets: [{
+                  label: 'Historical',
+                  data: historicalData.map(d => d.price),
+                  borderColor: 'rgba(var(--color-secondary-val), 1)',
+                  backgroundColor: 'rgba(var(--color-secondary-val), 0.1)',
+                  tension: 0.3,
+                  pointRadius: 0,
+              }, {
+                  label: 'Forecast',
+                  data: [...historicalData.slice(-1), ...forecastData].map(d => d.price),
+                  borderColor: 'rgba(var(--color-secondary-val), 1)',
+                  borderDash: [5, 5],
+                  tension: 0.3,
+                  pointRadius: 0,
+              }]
+          },
+          options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                  x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 5 } },
+                  y: { ticks: { callback: (value) => this.formatCurrency(value) } }
+              }
+          }
+      });
+  }
+
+  renderForecastMetrics(metrics) {
+      const grid = document.getElementById('forecastMetricsGrid');
+      grid.innerHTML = ''; // Clear previous metrics
+
+      const metricsData = [
+          { title: 'Trend', value: metrics.trend, arrow: metrics.trend === 'Bullish' ? '↗' : '↘' },
+          { title: 'Avg Percentage Change', value: `${metrics.avgPercentageChange}%` },
+          { title: 'Volatility', value: `${metrics.volatility}%` },
+          { title: 'Cumulative Return', value: `${metrics.cumulativeReturn}%` },
+          { title: 'Concentration Price', value: this.formatCurrency(metrics.concentrationPrice) },
+          { title: 'Maximum Drawdown', value: `${metrics.maxDrawdown}%` }
+      ];
+
+      metricsData.forEach(metric => {
+          const isNegative = parseFloat(metric.value) < 0 || metric.trend === 'Bearish';
+          const colorClass = isNegative ? 'negative' : 'positive';
+
+          const card = document.createElement('div');
+          card.className = 'metric-card-forecast';
+          card.innerHTML = `
+              <div class="metric-card-forecast__title">${metric.title}</div>
+              <div class="metric-card-forecast__value ${colorClass}">
+                  ${metric.value}
+                  ${metric.arrow ? `<span class="arrow">${metric.arrow}</span>` : ''}
+              </div>
+          `;
+          grid.appendChild(card);
+      });
+  }
+  // --- END: NEW FORECAST METHODS ---
+  
   /* ------------------------ EXPORT ------------------------------------- */
   exportCSV() {
     if (this.trades.length===0) { this.showToast('No trades to export','warning'); return; }
