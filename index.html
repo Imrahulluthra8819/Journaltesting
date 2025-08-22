@@ -10,13 +10,14 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <!-- TradingView Charting Library -->
     <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-</head>
-    <head>
     <style>
-        .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+        .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; }
         .report-section { display: flex; flex-direction: column; gap: 8px; }
-        .report-section h4 { margin-bottom: 8px; color: var(--color-primary); }
+        .report-section h4 { margin-bottom: 8px; color: var(--color-primary); border-bottom: 1px solid var(--color-border); padding-bottom: 8px;}
+        .momentum-chart-container { position: relative; height: 250px; margin-top: 24px; }
+        @media (max-width: 768px) { .report-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
@@ -89,9 +90,11 @@
                         <h2 style="margin: 0;">TraderLog</h2>
                     </div>
                 </div>
+                <!-- Hamburger Menu Button -->
                 <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
                     <span class="hamburger"></span>
                 </button>
+                <!-- Collapsible Navigation Content -->
                 <div class="nav-collapse" id="navCollapse">
                     <ul class="nav-menu">
                         <li class="nav-item"><button class="nav-link active" data-section="dashboard">Dashboard</button></li>
@@ -127,6 +130,7 @@
                         </div>
                     </div>
 
+                    <!-- News Ticker Container -->
                     <div id="newsTickerContainer" class="news-ticker-container"></div>
 
                     <div class="stats-grid">
@@ -137,6 +141,7 @@
                     </div>
 
                     <div class="dashboard-main-grid">
+                        <!-- Left Column -->
                         <div class="dashboard-col-left">
                             <div id="plCard" class="card">
                                 <div class="card__header">
@@ -163,6 +168,7 @@
                             </div>
                         </div>
 
+                        <!-- Right Column -->
                         <div class="dashboard-col-right">
                             <div class="confidence-tracker card">
                                 <div class="card__body">
@@ -252,6 +258,7 @@
                                             <label class="form-label">Please specify strategy</label>
                                             <input type="text" name="other_strategy" class="form-control" placeholder="Enter your custom strategy">
                                         </div>
+
                                         <div class="form-group"><label class="form-label">Exit Reason</label><select name="exitReason" class="form-control"><option value="">Select Exit Reason</option><option value="Target Hit">Target Hit</option><option value="SL Hit">Stop Loss Hit</option><option value="Manual Exit">Manual Exit</option><option value="Time Based Exit">Time Based Exit</option><option value="Breakeven">Breakeven</option><option value="Trailing Stop">Trailing Stop</option></select></div>
                                         <div class="form-group"><label class="form-label">Confidence Level (1-10)</label><input type="range" name="confidenceLevel" class="range-input" min="1" max="10" value="5"><div class="range-value">5</div></div>
                                         <div class="form-group"><label class="form-label">Entry Date *</label><input type="datetime-local" name="entryDate" class="form-control" required><div class="form-error" id="entryDate-error"></div></div>
@@ -405,8 +412,7 @@
                          <div class="card__header">
                             <h3>Past Notes</h3>
                         </div>
-                        <div id="notesHistoryContainer" class="card__body">
-                            </div>
+                        <div id="notesHistoryContainer" class="card__body"></div>
                     </div>
                 </div>
             </section>
@@ -457,11 +463,9 @@
                     </div>
                     
                     <div class="card" style="margin-top: 24px;">
-                        <div class="card__header">
-                            <h3>Simple Price Trend Prediction</h3>
-                        </div>
+                        <div class="card__header"><h3>Automated Analysis Report</h3></div>
                         <div class="card__body">
-                            <p>Select an asset type and enter a symbol to get a trend prediction based on its 20-day moving average.</p>
+                            <p>Select an asset type and enter a symbol to generate a detailed analysis report.</p>
                             <form id="predictionForm" class="form-grid" style="grid-template-columns: 1fr 1fr auto; align-items: flex-end; gap: 16px;">
                                 <div class="form-group" style="margin-bottom: 0;">
                                     <label for="assetType" class="form-label">Asset Type</label>
@@ -475,13 +479,14 @@
                                     <label for="predictionTicker" class="form-label">Ticker / Symbol</label>
                                     <input type="text" id="predictionTicker" class="form-control" placeholder="e.g., AAPL, BTC, EURUSD">
                                 </div>
-                                <button type="submit" class="btn btn--primary">Get Prediction</button>
+                                <button type="submit" class="btn btn--primary">Get Report</button>
                             </form>
                             <div id="predictionResult" style="margin-top: 20px; min-height: 50px;">
-                                </div>
+                                <!-- Prediction results will be displayed here -->
+                            </div>
                         </div>
                     </div>
-                    </div>
+                </div>
             </section>
 
         </main>
@@ -493,8 +498,7 @@
                     <h2>Note Details</h2>
                     <button class="modal-close" onclick="app.hideNoteModal()">&times;</button>
                 </div>
-                <div class="modal-body" id="noteModalBody">
-                    </div>
+                <div class="modal-body" id="noteModalBody"></div>
                 <div class="modal-footer">
                     <button class="btn btn--outline" onclick="app.hideNoteModal()">Close</button>
                     <button class="btn btn--primary" id="saveNoteChangesBtn">Save Changes</button>
