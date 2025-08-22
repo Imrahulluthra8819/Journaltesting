@@ -24,6 +24,7 @@ class TradingJournalApp {
     this.allNotes = [];
     this.currentEditingNoteId = null; // To track the note being edited
     this.charts = {};
+    this.momentumChart = null; // To manage the new analysis chart instance
     this.mainListenersAttached = false;
     this.currentCalendarDate = new Date();
     this.currencySymbol = '₹'; // Default to INR
@@ -438,7 +439,7 @@ class TradingJournalApp {
 
       const container = document.getElementById('newsTickerContainer');
       if (container) {
-          container.innerHTML = '';
+          container.innerHTML = ''; // Clear previous widget
           container.appendChild(script);
           this.tickerWidgetLoaded = true;
       }
@@ -481,14 +482,17 @@ class TradingJournalApp {
 
     try {
         if (existingNote) {
+            // Update existing note for today
             await this.db.collection('users').doc(this.currentUser.uid).collection('notes').doc(existingNote.id).update({
                 content: content,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
+            // Update local state
             const noteIndex = this.allNotes.findIndex(n => n.id === existingNote.id);
             this.allNotes[noteIndex].content = content;
             this.showToast('Note for today updated!', 'success');
         } else {
+            // Add new note for today
             const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('notes').add({
                 date: today,
                 content: content,
@@ -1332,7 +1336,7 @@ class TradingJournalApp {
     }
     const totalPL = trades.reduce((sum, t) => sum + (t.netPL || 0), 0);
     const wins = trades.filter(t => t.netPL > 0).length;
-    const winRate = trades.length > 0 ? Math.round((wins / this.trades.length) * 100) : 0;
+    const winRate = trades.length > 0 ? Math.round((wins / trades.length) * 100) : 0;
     const bestTrade = Math.max(0, ...this.trades.map(t => t.netPL));
     const worstTrade = Math.min(0, ...this.trades.map(t => t.netPL));
     return { totalPL, winRate, totalTrades: trades.length, bestTrade, worstTrade };
@@ -1463,7 +1467,6 @@ class TradingJournalApp {
   // --- END: NEW DASHBOARD CALENDAR METHOD ---
   
   // --- START: Updated Price Prediction Method ---
- // --- START: Replace the entire handleGetPrediction method with this new version ---
   async handleGetPrediction() {
     const tickerInput = document.getElementById('predictionTicker');
     const assetTypeInput = document.getElementById('assetType');
@@ -1478,6 +1481,10 @@ class TradingJournalApp {
     }
 
     resultDiv.innerHTML = `<div class="loading">Generating detailed analysis for ${ticker}...</div>`;
+    
+    if (this.momentumChart) {
+        this.momentumChart.destroy();
+    }
 
     try {
         const response = await fetch(`/.netlify/functions/predict-price?ticker=${ticker}&type=${type}`);
@@ -1493,55 +1500,64 @@ class TradingJournalApp {
             return `${symbol}${parseFloat(value).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         };
 
-        // --- Build Technical Analysis HTML ---
         const ta = data.technicalAnalysis;
         let technicalHtml = `
             <div class="report-section">
                 <h4>Technical Analysis (Short-Term)</h4>
+                <div class="trade-detail-item"><div class="trade-detail-label">5-Day EMA</div><div class="trade-detail-value">${formatDynamicCurrency(ta.ema5, data.currency)}</div></div>
+                <div class="trade-detail-item"><div class="trade-detail-label">9-Day EMA</div><div class="trade-detail-value">${formatDynamicCurrency(ta.ema9, data.currency)}</div></div>
+                <div class="trade-detail-item"><div class="trade-detail-label">50-Day SMA</div><div class="trade-detail-value">${formatDynamicCurrency(ta.sma50, data.currency)}</div></div>
                 <div class="trade-detail-item"><div class="trade-detail-label">RSI (14)</div><div class="trade-detail-value">${ta.rsi?.value || 'N/A'} (${ta.rsi?.signal || 'N/A'})</div></div>
                 <div class="trade-detail-item"><div class="trade-detail-label">MACD Signal</div><div class="trade-detail-value">${ta.macd?.analysis || 'N/A'}</div></div>
-                <div class="trade-detail-item"><div class="trade-detail-label">Bollinger Bands</div><div class="trade-detail-value">${ta.bollingerBands?.signal || 'N/A'}</div></div>
-                <div class="trade-detail-item"><div class="trade-detail-label">Price vs 20-Day MA</div><div class="trade-detail-value">${parseFloat(data.lastClose) > parseFloat(ta.sma20) ? 'Above (Bullish)' : 'Below (Bearish)'}</div></div>
-                <div class="trade-detail-item"><div class="trade-detail-label">Price vs 50-Day MA</div><div class="trade-detail-value">${parseFloat(data.lastClose) > parseFloat(ta.sma50) ? 'Above (Bullish)' : 'Below (Bearish)'}</div></div>
             </div>
         `;
 
-        // --- Build Fundamental Analysis HTML (only if data exists) ---
         const fa = data.fundamentalAnalysis;
         let fundamentalHtml = '';
         if (fa) {
-             fundamentalHtml = `
-                <div class="report-section">
-                    <h4>Fundamental Analysis (Long-Term)</h4>
-                    <div class="trade-detail-item"><div class="trade-detail-label">P/E Ratio</div><div class="trade-detail-value">${fa.peRatio}</div></div>
-                    <div class="trade-detail-item"><div class="trade-detail-label">EPS</div><div class="trade-detail-value">${fa.eps}</div></div>
-                    <div class="trade-detail-item"><div class="trade-detail-label">Market Cap</div><div class="trade-detail-value">${(parseInt(fa.marketCap) / 1000000000).toFixed(2)}B</div></div>
-                    <div class="trade-detail-item"><div class="trade-detail-label">52-Week High</div><div class="trade-detail-value">${formatDynamicCurrency(fa.yearHigh, data.currency)}</div></div>
-                    <div class="trade-detail-item"><div class="trade-detail-label">Analyst Target</div><div class="trade-detail-value">${formatDynamicCurrency(fa.analystTargetPrice, data.currency)}</div></div>
-                </div>
-            `;
+             fundamentalHtml = `<div class="report-section"><h4>Fundamental Analysis (Long-Term)</h4><div class="trade-detail-item"><div class="trade-detail-label">P/E Ratio</div><div class="trade-detail-value">${fa.peRatio}</div></div><div class="trade-detail-item"><div class="trade-detail-label">EPS</div><div class="trade-detail-value">${fa.eps}</div></div><div class="trade-detail-item"><div class="trade-detail-label">Market Cap</div><div class="trade-detail-value">${(parseInt(fa.marketCap) / 1000000000).toFixed(2)}B</div></div><div class="trade-detail-item"><div class="trade-detail-label">52-Week High</div><div class="trade-detail-value">${formatDynamicCurrency(fa.yearHigh, data.currency)}</div></div><div class="trade-detail-item"><div class="trade-detail-label">Analyst Target</div><div class="trade-detail-value">${formatDynamicCurrency(fa.analystTargetPrice, data.currency)}</div></div></div>`;
         } else if (type.toLowerCase() === 'stock') {
              fundamentalHtml = `<div class="report-section"><h4>Fundamental Analysis (Long-Term)</h4><div class="empty-state">Fundamental data not available.</div></div>`;
         }
 
-
-        // --- Assemble the Final Report ---
         resultDiv.innerHTML = `
             <h3>Analysis Report for ${data.ticker}</h3>
             <p style="color: var(--color-text-secondary); margin-bottom: 16px;">Last Close Price: <strong>${formatDynamicCurrency(data.lastClose, data.currency)}</strong></p>
-            <div class="report-grid">
-                ${technicalHtml}
-                ${fundamentalHtml}
-            </div>
+            <div class="report-grid">${technicalHtml}${fundamentalHtml}</div>
+            <div class="report-section"><h4 style="margin-top: 16px;">Momentum (MACD Histogram)</h4></div>
+            <div class="momentum-chart-container"><canvas id="momentumChartCanvas"></canvas></div>
             ${fa?.description ? `<div style="margin-top: 16px;"><p><strong>Company Overview:</strong> ${fa.description.substring(0, 400)}...</p></div>` : ''}
         `;
 
+        const ctx = document.getElementById('momentumChartCanvas').getContext('2d');
+        const macdHistory = ta.macd.history;
+        this.momentumChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: macdHistory.labels,
+                datasets: [{
+                    label: 'MACD Histogram',
+                    data: macdHistory.data,
+                    backgroundColor: macdHistory.data.map(v => v >= 0 ? 'rgba(16, 185, 129, 0.7)' : 'rgba(239, 68, 68, 0.7)'),
+                    borderColor: macdHistory.data.map(v => v >= 0 ? 'rgb(16, 185, 129)' : 'rgb(239, 68, 68)'),
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { font: { size: 10 } } },
+                    x: { ticks: { font: { size: 10 }, maxRotation: 70, minRotation: 70 } }
+                }
+            }
+        });
+
     } catch (error) {
         resultDiv.innerHTML = `<div class="message error"><strong>Error:</strong> ${error.message}</div>`;
-        console.error('Prediction fetch error:', error);
+        console.error('Analysis fetch error:', error);
     }
   }
-  // --- END: Updated Price Prediction Method ---
   // --- END: Updated Price Prediction Method ---
 
   /* ------------------------ EXPORT ------------------------------------- */
