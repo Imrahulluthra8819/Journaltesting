@@ -238,10 +238,23 @@ class TradingJournalApp {
       if (activeSection) this.showSection(activeSection.id);
     });
     
+    // --- ANALYSIS REPORT LISTENERS ---
     document.getElementById('predictionForm').addEventListener('submit', (e) => {
         e.preventDefault();
         this.handleGetPrediction();
     });
+    
+    const popularSymbolsSelect = document.getElementById('popularSymbols');
+    popularSymbolsSelect.addEventListener('change', () => {
+        const selectedOption = popularSymbolsSelect.options[popularSymbolsSelect.selectedIndex];
+        const ticker = selectedOption.value;
+        const type = selectedOption.dataset.type;
+        if (ticker) {
+            document.getElementById('predictionTicker').value = ticker;
+            document.getElementById('assetType').value = type;
+        }
+    });
+
 
     // --- HAMBURGER MENU ---
     const navToggle = document.getElementById('navToggle');
