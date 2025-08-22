@@ -1463,6 +1463,7 @@ class TradingJournalApp {
   // --- END: NEW DASHBOARD CALENDAR METHOD ---
   
   // --- START: Updated Price Prediction Method ---
+ // --- START: Replace the entire handleGetPrediction method with this new version ---
   async handleGetPrediction() {
     const tickerInput = document.getElementById('predictionTicker');
     const assetTypeInput = document.getElementById('assetType');
@@ -1476,7 +1477,7 @@ class TradingJournalApp {
         return;
     }
 
-    resultDiv.innerHTML = `<div class="loading">Fetching prediction for ${ticker}...</div>`;
+    resultDiv.innerHTML = `<div class="loading">Generating detailed analysis for ${ticker}...</div>`;
 
     try {
         const response = await fetch(`/.netlify/functions/predict-price?ticker=${ticker}&type=${type}`);
@@ -1487,42 +1488,52 @@ class TradingJournalApp {
         }
 
         const formatDynamicCurrency = (value, currencyCode) => {
-            const currencySymbols = {
-                USD: '$',
-                INR: '₹',
-                EUR: '€',
-                GBP: '£',
-                JPY: '¥'
-            };
+            const currencySymbols = { USD: '$', INR: '₹', EUR: '€', GBP: '£', JPY: '¥' };
             const symbol = currencySymbols[currencyCode] || currencyCode + ' ';
-            return `${symbol}${parseFloat(value).toLocaleString()}`;
+            return `${symbol}${parseFloat(value).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         };
 
-        const lastCloseFormatted = formatDynamicCurrency(data.lastClose, data.currency);
-        const predictionFormatted = formatDynamicCurrency(data.prediction, data.currency);
-        
-        const trendDirection = parseFloat(data.lastClose) >= parseFloat(data.prediction) ? 'above' : 'below';
-        const trendColor = trendDirection === 'above' ? 'positive' : 'negative';
-        
+        // --- Build Technical Analysis HTML ---
+        const ta = data.technicalAnalysis;
+        let technicalHtml = `
+            <div class="report-section">
+                <h4>Technical Analysis (Short-Term)</h4>
+                <div class="trade-detail-item"><div class="trade-detail-label">RSI (14)</div><div class="trade-detail-value">${ta.rsi?.value || 'N/A'} (${ta.rsi?.signal || 'N/A'})</div></div>
+                <div class="trade-detail-item"><div class="trade-detail-label">MACD Signal</div><div class="trade-detail-value">${ta.macd?.analysis || 'N/A'}</div></div>
+                <div class="trade-detail-item"><div class="trade-detail-label">Bollinger Bands</div><div class="trade-detail-value">${ta.bollingerBands?.signal || 'N/A'}</div></div>
+                <div class="trade-detail-item"><div class="trade-detail-label">Price vs 20-Day MA</div><div class="trade-detail-value">${parseFloat(data.lastClose) > parseFloat(ta.sma20) ? 'Above (Bullish)' : 'Below (Bearish)'}</div></div>
+                <div class="trade-detail-item"><div class="trade-detail-label">Price vs 50-Day MA</div><div class="trade-detail-value">${parseFloat(data.lastClose) > parseFloat(ta.sma50) ? 'Above (Bullish)' : 'Below (Bearish)'}</div></div>
+            </div>
+        `;
+
+        // --- Build Fundamental Analysis HTML (only if data exists) ---
+        const fa = data.fundamentalAnalysis;
+        let fundamentalHtml = '';
+        if (fa) {
+             fundamentalHtml = `
+                <div class="report-section">
+                    <h4>Fundamental Analysis (Long-Term)</h4>
+                    <div class="trade-detail-item"><div class="trade-detail-label">P/E Ratio</div><div class="trade-detail-value">${fa.peRatio}</div></div>
+                    <div class="trade-detail-item"><div class="trade-detail-label">EPS</div><div class="trade-detail-value">${fa.eps}</div></div>
+                    <div class="trade-detail-item"><div class="trade-detail-label">Market Cap</div><div class="trade-detail-value">${(parseInt(fa.marketCap) / 1000000000).toFixed(2)}B</div></div>
+                    <div class="trade-detail-item"><div class="trade-detail-label">52-Week High</div><div class="trade-detail-value">${formatDynamicCurrency(fa.yearHigh, data.currency)}</div></div>
+                    <div class="trade-detail-item"><div class="trade-detail-label">Analyst Target</div><div class="trade-detail-value">${formatDynamicCurrency(fa.analystTargetPrice, data.currency)}</div></div>
+                </div>
+            `;
+        } else if (type.toLowerCase() === 'stock') {
+             fundamentalHtml = `<div class="report-section"><h4>Fundamental Analysis (Long-Term)</h4><div class="empty-state">Fundamental data not available.</div></div>`;
+        }
+
+
+        // --- Assemble the Final Report ---
         resultDiv.innerHTML = `
-            <div class="trade-detail-grid">
-                <div class="trade-detail-item">
-                    <div class="trade-detail-label">Symbol</div>
-                    <div class="trade-detail-value">${data.ticker}</div>
-                </div>
-                <div class="trade-detail-item">
-                    <div class="trade-detail-label">Last Close Price</div>
-                    <div class="trade-detail-value">${lastCloseFormatted}</div>
-                </div>
-                <div class="trade-detail-item">
-                    <div class="trade-detail-label">${data.model}</div>
-                    <div class="trade-detail-value">${predictionFormatted}</div>
-                </div>
+            <h3>Analysis Report for ${data.ticker}</h3>
+            <p style="color: var(--color-text-secondary); margin-bottom: 16px;">Last Close Price: <strong>${formatDynamicCurrency(data.lastClose, data.currency)}</strong></p>
+            <div class="report-grid">
+                ${technicalHtml}
+                ${fundamentalHtml}
             </div>
-            <div class="message info" style="margin-top: 16px;">
-                The last closing price is <strong class="${trendColor}">${trendDirection}</strong> the 20-day trend line.
-                <br><small><em>Disclaimer: ${data.disclaimer}</em></small>
-            </div>
+            ${fa?.description ? `<div style="margin-top: 16px;"><p><strong>Company Overview:</strong> ${fa.description.substring(0, 400)}...</p></div>` : ''}
         `;
 
     } catch (error) {
@@ -1530,6 +1541,7 @@ class TradingJournalApp {
         console.error('Prediction fetch error:', error);
     }
   }
+  // --- END: Updated Price Prediction Method ---
   // --- END: Updated Price Prediction Method ---
 
   /* ------------------------ EXPORT ------------------------------------- */
