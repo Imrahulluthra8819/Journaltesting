@@ -38,11 +38,15 @@ async function fetchYahooFinanceData(symbol, apiKey) {
             'x-rapidapi-host': 'yahoofinance-api.p.rapidapi.com'
         }
     };
+    
+    // --- DEBUGGING: Log the options being sent to the API ---
+    console.log("Attempting to fetch from Yahoo Finance with options:", JSON.stringify(options));
+
     try {
         const response = await fetch(url, options);
         if (!response.ok) {
              const errorBody = await response.text();
-             console.error("Yahoo Finance API Error:", errorBody);
+             console.error("Yahoo Finance API Error Response:", errorBody); // More detailed error log
              return null;
         }
         const result = await response.json();
@@ -56,6 +60,23 @@ async function fetchYahooFinanceData(symbol, apiKey) {
 
 // Main serverless function handler
 exports.handler = async function (event) {
+    
+    // --- START DEBUGGING BLOCK ---
+    console.log("--- Executing get-yahoofinance-forecast function ---");
+    const geminiKeyExists = !!process.env.GEMINI_API_KEY;
+    const yahooKeyExists = !!process.env.YAHOO_FINANCE_API_KEY;
+    
+    console.log("Is GEMINI_API_KEY set?", geminiKeyExists);
+    console.log("Is YAHOO_FINANCE_API_KEY set?", yahooKeyExists);
+    
+    if (yahooKeyExists) {
+        const key = process.env.YAHOO_FINANCE_API_KEY;
+        console.log(`Yahoo Key starts with: ${key.substring(0, 5)}... and ends with: ...${key.substring(key.length - 5)}`);
+    } else {
+        console.log("Yahoo Finance API Key is MISSING from environment variables.");
+    }
+    // --- END DEBUGGING BLOCK ---
+
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: 'Method Not Allowed' };
     }
@@ -79,7 +100,6 @@ exports.handler = async function (event) {
             throw new Error(`Could not retrieve data from Yahoo Finance for symbol: ${symbol}. Please check the symbol and try again.`);
         }
         
-        // Construct a summary of the real data to pass to the AI for analysis
         const analysisContext = {
             displayName: yahooData.displayName || yahooData.shortName,
             currency: yahooData.currency,
