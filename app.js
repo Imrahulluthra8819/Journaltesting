@@ -358,11 +358,21 @@ class TradingJournalApp {
   }
 
   /* ------------------------------ HELPERS ------------------------------- */
-  formatCurrency(val) {
-    if (val === null || val === undefined) return `${this.currencySymbol}0.00`;
+  formatCurrency(val, currencyCode = null) {
+    let symbol = this.currencySymbol;
+    let locale = symbol === '₹' ? 'en-IN' : 'en-US';
+
+    if(currencyCode) {
+        if (currencyCode === 'INR') symbol = '₹';
+        if (currencyCode === 'USD') symbol = '$';
+        // Add other currency codes as needed
+        locale = currencyCode === 'INR' ? 'en-IN' : 'en-US';
+    }
+
+    if (val === null || val === undefined) return `${symbol}0.00`;
+    
     const sign = val < 0 ? '-' : '';
-    const locale = this.currencySymbol === '₹' ? 'en-IN' : 'en-US';
-    return sign + this.currencySymbol + Math.abs(val).toLocaleString(locale, {
+    return sign + symbol + Math.abs(val).toLocaleString(locale, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     });
@@ -1680,16 +1690,16 @@ class TradingJournalApp {
           return;
       }
 
-      initialMsg.innerHTML = '<div class="loading">Generating AI forecast... This may take a moment.</div>';
+      initialMsg.innerHTML = '<div class="loading">Fetching Yahoo Finance data & generating AI forecast...</div>';
       initialMsg.style.display = 'block';
       chartContainer.style.display = 'none';
       metricsContainer.style.display = 'none';
 
       try {
-          const response = await fetch('/.netlify/functions/get-forecast', {
+          const response = await fetch('/.netlify/functions/get-yahoofinance-forecast', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ symbol, timeframe, steps, trades: this.allTrades.slice(0, 10) })
+              body: JSON.stringify({ symbol, timeframe, steps })
           });
 
           if (!response.ok) {
@@ -1699,13 +1709,13 @@ class TradingJournalApp {
 
           const data = await response.json();
           
-          forecastTitle.textContent = `${symbol.toUpperCase()} Price Forecast`;
+          forecastTitle.textContent = `${(data.displayName || symbol).toUpperCase()} Price Forecast`;
           initialMsg.style.display = 'none';
           chartContainer.style.display = 'block';
           metricsContainer.style.display = 'block';
           
-          this.renderForecastChart(data.chartData, parseInt(steps));
-          this.renderForecastMetrics(data.metrics);
+          this.renderForecastChart(data.chartData, parseInt(steps), data.currency);
+          this.renderForecastMetrics(data.metrics, data.currency);
 
       } catch (error) {
           console.error("Error fetching AI forecast:", error);
@@ -1713,61 +1723,74 @@ class TradingJournalApp {
       }
   }
 
-  renderForecastChart(data, forecastSteps) {
-      const ctx = document.getElementById('forecastChartCanvas').getContext('2d');
-      if (this.forecastChart) {
-          this.forecastChart.destroy();
-      }
-  
-      const forecastStartIndex = data.length - forecastSteps;
-      const historicalData = data.slice(0, forecastStartIndex + 1); // Overlap by one point
-      const forecastData = data.slice(forecastStartIndex);
-  
-      // Ensure forecastData is not empty and has a defined price to avoid errors
-      const forecastPoints = forecastData.map(d => d ? d.price : null);
-  
-      // Prepend nulls to align the forecast dataset with the historical data
-      const alignedForecastData = Array(historicalData.length - 1).fill(null).concat(forecastPoints);
-  
-      this.forecastChart = new Chart(ctx, {
-          type: 'line',
-          data: {
-              labels: data.map(d => d ? d.date : ''),
-              datasets: [{
-                  label: 'Historical',
-                  data: historicalData.map(d => d ? d.price : null),
-                  borderColor: 'rgba(var(--color-secondary-val), 1)',
-                  backgroundColor: 'rgba(var(--color-secondary-val), 0.1)',
-                  fill: true,
-                  tension: 0.3,
-                  pointRadius: 0,
-              }, {
-                  label: 'Forecast',
-                  data: alignedForecastData,
-                  borderColor: 'rgba(var(--color-secondary-val), 1)',
-                  borderDash: [5, 5],
-                  fill: false,
-                  tension: 0.3,
-                  pointRadius: 0,
-              }]
-          },
-          options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: { legend: { display: false } },
-              scales: {
-                  x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 7 } },
-                  y: { ticks: { callback: (value) => this.formatCurrency(value) } }
-              },
-              interaction: {
-                  intersect: false,
-                  mode: 'index',
-              },
-          }
-      });
-  }
+  renderForecastChart(data, forecastSteps, currencyCode) {
+    const ctx = document.getElementById('forecastChartCanvas').getContext('2d');
+    if (this.forecastChart) {
+        this.forecastChart.destroy();
+    }
 
-  renderForecastMetrics(metrics) {
+    const forecastStartIndex = data.length - forecastSteps;
+    const historicalData = data.slice(0, forecastStartIndex + 1);
+    const forecastData = data.slice(forecastStartIndex);
+
+    const forecastPoints = forecastData.map(d => d ? d.price : null);
+    const alignedForecastData = Array(historicalData.length - 1).fill(null).concat(forecastPoints);
+
+    this.forecastChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.map(d => d ? d.date : ''),
+            datasets: [{
+                label: 'Historical',
+                data: historicalData.map(d => d ? d.price : null),
+                borderColor: 'rgba(var(--color-secondary-val), 1)',
+                backgroundColor: 'rgba(var(--color-secondary-val), 0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+            }, {
+                label: 'Forecast',
+                data: alignedForecastData,
+                borderColor: 'rgba(var(--color-secondary-val), 1)',
+                borderDash: [5, 5],
+                fill: false,
+                tension: 0.3,
+                pointRadius: 0,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { 
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null) {
+                                label += this.formatCurrency(context.parsed.y, currencyCode);
+                            }
+                            return label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 7 } },
+                y: { ticks: { callback: (value) => this.formatCurrency(value, currencyCode) } }
+            },
+            interaction: {
+                intersect: false,
+                mode: 'index',
+            },
+        }
+    });
+}
+
+  renderForecastMetrics(metrics, currencyCode) {
       const grid = document.getElementById('forecastMetricsGrid');
       grid.innerHTML = ''; // Clear previous metrics
 
@@ -1776,7 +1799,7 @@ class TradingJournalApp {
           { title: 'Avg Percentage Change', value: `${metrics.avgPercentageChange}%` },
           { title: 'Volatility', value: `${metrics.volatility}%` },
           { title: 'Cumulative Return', value: `${metrics.cumulativeReturn}%` },
-          { title: 'Concentration Price', value: this.formatCurrency(metrics.concentrationPrice) },
+          { title: 'Concentration Price', value: this.formatCurrency(metrics.concentrationPrice, currencyCode) },
           { title: 'Maximum Drawdown', value: `${metrics.maxDrawdown}%` }
       ];
 
