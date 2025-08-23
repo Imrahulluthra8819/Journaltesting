@@ -28,14 +28,14 @@ async function callGemini(prompt, apiKey) {
     }
 }
 
-// Helper to fetch data from Yahoo Finance API via RapidAPI
+// Helper to fetch data from the NEW Yahoo Finance API
 async function fetchYahooFinanceData(symbol, apiKey) {
-    const url = `https://yahoo-finance-real-time1.p.rapidapi.com/market/v2/get-quotes?symbols=${symbol}`;
+    const url = `https://yfinance-api.p.rapidapi.com/v11/finance/quoteSummary/${symbol}?modules=price,summaryDetail,financialData`;
     const options = {
         method: 'GET',
         headers: {
             'x-rapidapi-key': apiKey,
-            'x-rapidapi-host': 'yahoo-finance-real-time1.p.rapidapi.com' // <-- THIS LINE IS THE FIX
+            'x-rapidapi-host': 'yfinance-api.p.rapidapi.com'
         }
     };
 
@@ -47,7 +47,7 @@ async function fetchYahooFinanceData(symbol, apiKey) {
              return null;
         }
         const result = await response.json();
-        return result?.quoteResponse?.result[0] || null;
+        return result?.quoteSummary?.result[0] || null;
     } catch (error) {
         console.error('Error fetching from Yahoo Finance API:', error);
         return null;
@@ -66,10 +66,6 @@ exports.handler = async function (event) {
     const yahooFinanceApiKey = process.env.YAHOO_FINANCE_API_KEY;
 
     if (!geminiApiKey || !yahooFinanceApiKey) {
-        const missingKeys = [];
-        if (!geminiApiKey) missingKeys.push('GEMINI_API_KEY');
-        if (!yahooFinanceApiKey) missingKeys.push('YAHOO_FINANCE_API_KEY');
-        console.error(`${missingKeys.join(' and ')} environment variable(s) not set.`);
         return { statusCode: 500, body: JSON.stringify({ error: "API service is not configured correctly. Missing required keys." }) };
     }
 
@@ -77,24 +73,28 @@ exports.handler = async function (event) {
         const yahooData = await fetchYahooFinanceData(symbol, yahooFinanceApiKey);
 
         if (!yahooData) {
-            throw new Error(`Could not retrieve data from Yahoo Finance for symbol: ${symbol}. Please check the symbol and try again.`);
+            throw new Error(`Could not retrieve data from Yahoo Finance for symbol: ${symbol}. This symbol may not be valid.`);
         }
         
+        // Extract data from the new API response structure
+        const priceData = yahooData.price;
+        const summaryData = yahooData.summaryDetail;
+        const financialData = yahooData.financialData;
+
         const analysisContext = {
-            displayName: yahooData.displayName || yahooData.shortName,
-            currency: yahooData.currency,
-            regularMarketPrice: yahooData.regularMarketPrice,
-            regularMarketChangePercent: yahooData.regularMarketChangePercent,
-            fiftyTwoWeekRange: yahooData.fiftyTwoWeekRange,
-            averageDailyVolume10Day: yahooData.averageDailyVolume10Day,
-            averageAnalystRating: yahooData.averageAnalystRating,
+            displayName: priceData.longName || priceData.shortName,
+            currency: priceData.currency,
+            regularMarketPrice: priceData.regularMarketPrice?.raw,
+            fiftyTwoWeekRange: `${summaryData.fiftyTwoWeekLow?.raw} - ${summaryData.fiftyTwoWeekHigh?.raw}`,
+            averageDailyVolume10Day: summaryData.averageDailyVolume10Day?.raw,
+            averageAnalystRating: financialData.recommendationKey,
             targetPrice: {
-                mean: yahooData.targetPriceMean,
-                high: yahooData.targetPriceHigh,
-                low: yahooData.targetPriceLow
+                mean: financialData.targetMeanPrice?.raw,
+                high: financialData.targetHighPrice?.raw,
+                low: financialData.targetLowPrice?.raw
             }
         };
-
+        
         const today = new Date();
         const year = today.getFullYear();
         const month = String(today.getMonth() + 1).padStart(2, '0');
@@ -105,14 +105,14 @@ exports.handler = async function (event) {
             You are a sophisticated financial analyst AI. Your task is to interpret real-world financial data from Yahoo Finance and generate a plausible, simulated price forecast chart and a set of metrics.
 
             **IMPORTANT RULES:**
-            1.  The data you generate is a simulation for a trading journal. It is NOT real financial advice.
-            2.  You MUST return the data in the specified JSON format and nothing else.
-            3.  Base your forecast on the provided Yahoo Finance data. The generated chart and metrics should logically reflect the analyst ratings and price targets.
-            4.  The last historical data point in your generated 'chartData' MUST have a price equal to the 'regularMarketPrice' from the provided Yahoo data.
-            5.  The historical data's timeline MUST end on the provided "Current Date".
-            6.  Generate 50 data points for the "historical" part of the chart and exactly ${steps} data points for the "forecast" part.
-            7.  The "metrics" values should be mathematically consistent with your generated chart data.
-            8.  The "trend" MUST be either "Bullish" or "Bearish".
+            1. The data you generate is a simulation for a trading journal. It is NOT real financial advice.
+            2. You MUST return the data in the specified JSON format and nothing else.
+            3. Base your forecast on the provided Yahoo Finance data.
+            4. The last historical data point in your 'chartData' MUST have a price equal to the 'regularMarketPrice' from the provided Yahoo data.
+            5. The historical data's timeline MUST end on the provided "Current Date".
+            6. Generate 50 historical data points and exactly ${steps} forecast data points.
+            7. The "metrics" values must be consistent with your generated chart data.
+            8. The "trend" MUST be either "Bullish" or "Bearish".
 
             **Current Date:** ${currentDate}
 
@@ -123,18 +123,8 @@ exports.handler = async function (event) {
             {
               "displayName": "${analysisContext.displayName}",
               "currency": "${analysisContext.currency}",
-              "chartData": [
-                {"date": "YYYY-MM-DD", "price": 100.00},
-                ...
-              ],
-              "metrics": {
-                "trend": "Bullish",
-                "avgPercentageChange": 1.23,
-                "volatility": 2.34,
-                "cumulativeReturn": 5.67,
-                "concentrationPrice": 105.50,
-                "maxDrawdown": -3.45
-              }
+              "chartData": [ {"date": "YYYY-MM-DD", "price": 100.00}, ... ],
+              "metrics": { "trend": "Bullish", "avgPercentageChange": 1.23, "volatility": 2.34, "cumulativeReturn": 5.67, "concentrationPrice": 105.50, "maxDrawdown": -3.45 }
             }
         `;
 
