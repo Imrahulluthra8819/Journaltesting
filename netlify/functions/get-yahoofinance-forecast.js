@@ -30,23 +30,20 @@ async function callGemini(prompt, apiKey) {
 
 // Helper to fetch data from Yahoo Finance API via RapidAPI
 async function fetchYahooFinanceData(symbol, apiKey) {
-    const url = `https://yahoofinance-api.p.rapidapi.com/market/v2/get-quotes?symbols=${symbol}`;
+    const url = `https://yahoo-finance-real-time1.p.rapidapi.com/market/v2/get-quotes?symbols=${symbol}`;
     const options = {
         method: 'GET',
         headers: {
             'x-rapidapi-key': apiKey,
-            'x-rapidapi-host': 'yahoofinance-api.p.rapidapi.com'
+            'x-rapidapi-host': 'yahoo-finance-real-time1.p.rapidapi.com' // <-- THIS LINE IS THE FIX
         }
     };
-    
-    // --- DEBUGGING: Log the options being sent to the API ---
-    console.log("Attempting to fetch from Yahoo Finance with options:", JSON.stringify(options));
 
     try {
         const response = await fetch(url, options);
         if (!response.ok) {
              const errorBody = await response.text();
-             console.error("Yahoo Finance API Error Response:", errorBody); // More detailed error log
+             console.error("Yahoo Finance API Error Response:", errorBody);
              return null;
         }
         const result = await response.json();
@@ -60,23 +57,6 @@ async function fetchYahooFinanceData(symbol, apiKey) {
 
 // Main serverless function handler
 exports.handler = async function (event) {
-    
-    // --- START DEBUGGING BLOCK ---
-    console.log("--- Executing get-yahoofinance-forecast function ---");
-    const geminiKeyExists = !!process.env.GEMINI_API_KEY;
-    const yahooKeyExists = !!process.env.YAHOO_FINANCE_API_KEY;
-    
-    console.log("Is GEMINI_API_KEY set?", geminiKeyExists);
-    console.log("Is YAHOO_FINANCE_API_KEY set?", yahooKeyExists);
-    
-    if (yahooKeyExists) {
-        const key = process.env.YAHOO_FINANCE_API_KEY;
-        console.log(`Yahoo Key starts with: ${key.substring(0, 5)}... and ends with: ...${key.substring(key.length - 5)}`);
-    } else {
-        console.log("Yahoo Finance API Key is MISSING from environment variables.");
-    }
-    // --- END DEBUGGING BLOCK ---
-
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: 'Method Not Allowed' };
     }
