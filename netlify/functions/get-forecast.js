@@ -42,21 +42,29 @@ exports.handler = async function (event) {
         return { statusCode: 500, body: JSON.stringify({ error: "AI service is not configured." }) };
     }
 
+    // --- FIX: Get and format the current date ---
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+    const day = String(today.getDate()).padStart(2, '0');
+    const currentDate = `${year}-${month}-${day}`;
+
     // IMPORTANT: This prompt asks the AI to generate a *simulated* forecast.
     // This is for journaling and educational purposes, not real financial advice.
     const prompt = `
-        You are a sophisticated financial analyst AI. Your task is to generate a plausible, simulated price forecast for a financial asset based on the provided context.
+        You are a sophisticated financial analyst AI. Your task is to generate a plausible, simulated price forecast for a financial asset.
 
         **IMPORTANT RULES:**
         1.  The data you generate is a simulation for a trading journal. It is NOT real financial advice.
         2.  You MUST return the data in the specified JSON format and nothing else.
-        3.  Generate 50 data points for the "historical" part of the chart and exactly the number of forecast "steps" requested by the user.
-        4.  The "chartData" dates should be recent, ending today, and formatted as "YYYY-MM-DD".
-        5.  The "metrics" values should be mathematically consistent with the generated chart data.
-        6.  The "concentrationPrice" should be a price level where activity appears most frequent in your generated data.
+        3.  Generate 50 data points for the "historical" part of the chart.
+        4.  The historical data's timeline MUST end on the provided "Current Date". This is the anchor point for your entire response.
+        5.  Generate exactly the number of forecast "steps" requested by the user, starting from the day after the "Current Date".
+        6.  The "metrics" values must be mathematically consistent with the chart data you generate.
         7.  The "trend" MUST be either "Bullish" or "Bearish".
 
         **Context:**
+        -   **Current Date:** ${currentDate}
         -   **Asset Symbol:** ${symbol}
         -   **Forecast Timeframe:** ${timeframe}
         -   **Forecast Steps:** ${steps}
