@@ -1704,7 +1704,7 @@ class TradingJournalApp {
           chartContainer.style.display = 'block';
           metricsContainer.style.display = 'block';
           
-          this.renderForecastChart(data.chartData);
+          this.renderForecastChart(data.chartData, parseInt(steps));
           this.renderForecastMetrics(data.metrics);
 
       } catch (error) {
@@ -1713,31 +1713,40 @@ class TradingJournalApp {
       }
   }
 
-  renderForecastChart(data) {
+  renderForecastChart(data, forecastSteps) {
       const ctx = document.getElementById('forecastChartCanvas').getContext('2d');
       if (this.forecastChart) {
           this.forecastChart.destroy();
       }
-
-      const historicalData = data.slice(0, -25);
-      const forecastData = data.slice(-26);
-
+  
+      const forecastStartIndex = data.length - forecastSteps;
+      const historicalData = data.slice(0, forecastStartIndex + 1); // Overlap by one point
+      const forecastData = data.slice(forecastStartIndex);
+  
+      // Ensure forecastData is not empty and has a defined price to avoid errors
+      const forecastPoints = forecastData.map(d => d ? d.price : null);
+  
+      // Prepend nulls to align the forecast dataset with the historical data
+      const alignedForecastData = Array(historicalData.length - 1).fill(null).concat(forecastPoints);
+  
       this.forecastChart = new Chart(ctx, {
           type: 'line',
           data: {
-              labels: data.map(d => d.date),
+              labels: data.map(d => d ? d.date : ''),
               datasets: [{
                   label: 'Historical',
-                  data: historicalData.map(d => d.price),
+                  data: historicalData.map(d => d ? d.price : null),
                   borderColor: 'rgba(var(--color-secondary-val), 1)',
                   backgroundColor: 'rgba(var(--color-secondary-val), 0.1)',
+                  fill: true,
                   tension: 0.3,
                   pointRadius: 0,
               }, {
                   label: 'Forecast',
-                  data: [...historicalData.slice(-1), ...forecastData].map(d => d.price),
+                  data: alignedForecastData,
                   borderColor: 'rgba(var(--color-secondary-val), 1)',
                   borderDash: [5, 5],
+                  fill: false,
                   tension: 0.3,
                   pointRadius: 0,
               }]
@@ -1747,9 +1756,13 @@ class TradingJournalApp {
               maintainAspectRatio: false,
               plugins: { legend: { display: false } },
               scales: {
-                  x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 5 } },
+                  x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 7 } },
                   y: { ticks: { callback: (value) => this.formatCurrency(value) } }
-              }
+              },
+              interaction: {
+                  intersect: false,
+                  mode: 'index',
+              },
           }
       });
   }
