@@ -38,7 +38,8 @@ async function fetchYahooFinanceData(symbol, apiKey) {
             'x-rapidapi-host': 'yfinance-api.p.rapidapi.com'
         }
     };
-
+    // --- DEBUGGING: Log the options being sent to the API ---
+    console.log("Attempting to fetch from Yahoo Finance with options:", JSON.stringify(options));
     try {
         const response = await fetch(url, options);
         if (!response.ok) {
@@ -57,6 +58,22 @@ async function fetchYahooFinanceData(symbol, apiKey) {
 
 // Main serverless function handler
 exports.handler = async function (event) {
+    // --- START DEBUGGING BLOCK ---
+    console.log("--- Executing get-yahoofinance-forecast function (v2) ---");
+    const geminiKeyExists = !!process.env.GEMINI_API_KEY;
+    const yahooKeyExists = !!process.env.YAHOO_FINANCE_API_KEY;
+    
+    console.log("Is GEMINI_API_KEY set?", geminiKeyExists);
+    console.log("Is YAHOO_FINANCE_API_KEY set?", yahooKeyExists);
+    
+    if (yahooKeyExists) {
+        const key = process.env.YAHOO_FINANCE_API_KEY;
+        console.log(`Yahoo Key starts with: ${key.substring(0, 5)}... and ends with: ...${key.substring(key.length - 5)}`);
+    } else {
+        console.log("Yahoo Finance API Key is MISSING from environment variables.");
+    }
+    // --- END DEBUGGING BLOCK ---
+
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, body: 'Method Not Allowed' };
     }
@@ -76,7 +93,6 @@ exports.handler = async function (event) {
             throw new Error(`Could not retrieve data from Yahoo Finance for symbol: ${symbol}. This symbol may not be valid.`);
         }
         
-        // Extract data from the new API response structure
         const priceData = yahooData.price;
         const summaryData = yahooData.summaryDetail;
         const financialData = yahooData.financialData;
