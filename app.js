@@ -1437,7 +1437,7 @@ class TradingJournalApp {
                   <td>${followed} / ${totalTrades}</td>
                   <td>
                       <div class="progress-bar">
-                          <div class="progress-bar-fill" style="width: ${adherence}%;">${adherence}%</div>
+                          <div class="progress-bar-fill" style="width: ${adherence}%">${adherence}%</div>
                       </div>
                   </td>
               </tr>
