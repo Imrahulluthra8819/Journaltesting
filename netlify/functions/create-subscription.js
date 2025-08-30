@@ -4,6 +4,8 @@
 
 const admin = require('firebase-admin');
 
+let db, auth;
+
 // This block initializes the connection to your Firebase database.
 // It uses the environment variables you set up in your Netlify project.
 try {
@@ -17,16 +19,26 @@ try {
             }),
         });
     }
+    // Initialize db and auth only after a successful connection.
+    db = admin.firestore();
+    auth = admin.auth();
 } catch (e) {
-    console.error("CRITICAL ERROR: Firebase admin initialization FAILED.", e);
-    // If initialization fails, the function will stop and log the error.
+    console.error("CRITICAL ERROR: Firebase admin initialization FAILED. Check your environment variables.", e);
 }
-
-const db = admin.firestore();
-const auth = admin.auth();
 
 // This is the main function that runs when your payment page calls it.
 exports.handler = async (event) => {
+  // *** FIX ***
+  // Add a check right at the start to ensure Firebase initialized correctly.
+  // If not, it means the environment variables are wrong.
+  if (!db || !auth) {
+      console.error("Firebase Admin SDK not initialized. This is likely due to missing or incorrect environment variables in Netlify.");
+      return {
+          statusCode: 500,
+          body: JSON.stringify({ error: "Server configuration error. Please contact support." })
+      };
+  }
+  
   console.log("Function invoked. Body:", event.body);
 
   if (event.httpMethod !== 'POST') {
@@ -41,23 +53,16 @@ exports.handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields: planId and email.' }) };
     }
 
-    // --- UPDATED LOGIC TO HANDLE NEW TRIAL USERS ---
+    // --- LOGIC TO HANDLE NEW TRIAL USERS ---
     let userRecord;
     try {
-        // Try to get an existing user by their email.
         userRecord = await auth.getUserByEmail(email);
         console.log(`SUCCESS: Found existing user with UID: ${userRecord.uid}`);
     } catch (error) {
-        // Check if the error is because the user was not found.
         if (error.code === 'auth/user-not-found') {
-            // *** FIX ***
-            // If the user doesn't exist, we will ONLY create a new account if it's for a free trial.
             if (planId === 'trial') {
                 console.log(`User not found for 'trial' plan. Creating new account for ${email}.`);
                 try {
-                    // Create a new user in Firebase Authentication.
-                    // Note: This user is created without a password. They will need to use the 
-                    // "Forgot Password" feature on your journal's login page to set their password for the first time.
                     userRecord = await auth.createUser({
                         email: email,
                         displayName: name || '',
@@ -68,7 +73,6 @@ exports.handler = async (event) => {
                     return { statusCode: 500, body: JSON.stringify({ error: `Could not create account: ${creationError.message}` }) };
                 }
             } else {
-                // For PAID plans, the original, correct behavior is maintained. The user MUST exist.
                 console.error(`ERROR: User not found for paid plan (${planId}) with email: ${email}.`);
                 return {
                     statusCode: 404,
@@ -76,7 +80,6 @@ exports.handler = async (event) => {
                 };
             }
         } else {
-            // For any other authentication errors (e.g., network issues), throw them to be handled by the main error catcher.
             console.error(`ERROR: An unexpected authentication error occurred for email: ${email}`, error);
             throw error;
         }
@@ -87,7 +90,6 @@ exports.handler = async (event) => {
     let endDate = new Date();
     let durationDays = 0;
 
-    // Calculate the subscription end date based on the planId received.
     switch (planId) {
       case 'trial': durationDays = 14; break;
       case 'monthly': durationDays = 30; break;
@@ -100,7 +102,6 @@ exports.handler = async (event) => {
     
     endDate.setDate(now.getDate() + durationDays);
 
-    // Prepare the subscription data to be saved in Firestore.
     const subscriptionData = {
       planId,
       userId: uid,
@@ -114,18 +115,15 @@ exports.handler = async (event) => {
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    // Create or update the subscription document in the 'subscriptions' collection.
     await db.collection('subscriptions').doc(uid).set(subscriptionData, { merge: true });
     console.log(`SUCCESS: Subscription created/updated for UID: ${uid}, Plan: ${planId}`);
 
-    // Send a success response back to the payment page.
     return {
       statusCode: 200,
       body: JSON.stringify({ success: true, message: 'Subscription activated successfully.' }),
     };
 
   } catch (error) {
-    // This is the final safety net. It catches any unexpected errors.
     console.error('CRITICAL ERROR: Unhandled exception in handler.', error);
     return {
       statusCode: 500,
@@ -133,3 +131,4 @@ exports.handler = async (event) => {
     };
   }
 };
+
