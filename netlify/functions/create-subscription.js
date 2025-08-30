@@ -1,106 +1,91 @@
-// netlify/functions/create-subscription.js
-
-// This function securely creates a subscription record in Firestore.
-// It requires firebase-admin for backend operations.
-// You'll need to add "firebase-admin" to your project's package.json
-
 const admin = require('firebase-admin');
 
-// IMPORTANT: Store your Firebase Service Account credentials as Netlify environment variables.
-// Do NOT hardcode them here.
-// 1. In your Firebase project settings, go to "Service accounts" and generate a new private key.
-// 2. In your Netlify site settings, go to "Build & deploy" -> "Environment".
-// 3. Add these environment variables:
-//    - FIREBASE_PROJECT_ID
-//    - FIREBASE_CLIENT_EMAIL
-//    - FIREBASE_PRIVATE_KEY (copy the entire key, including the "-----BEGIN PRIVATE KEY-----" parts)
-
-const serviceAccount = {
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-  // The private key needs to be parsed correctly from the environment variable.
-  privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-};
-
-// Initialize Firebase Admin SDK only once
+// Initialize Firebase Admin SDK
+// This setup assumes you have set the FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, 
+// and FIREBASE_PRIVATE_KEY environment variables in your Netlify settings.
 if (!admin.apps.length) {
   admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    }),
   });
 }
 
 const db = admin.firestore();
-const auth = admin.auth();
 
-exports.handler = async function (event, context) {
+exports.handler = async (event, context) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
   try {
-    const { email, planId } = JSON.parse(event.body);
+    const { planId, uid, email, name } = JSON.parse(event.body);
 
-    if (!email || !planId) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'Missing email or planId' }) };
+    if (!planId || !uid) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'Missing planId or uid.' }) };
     }
 
-    // Get or create the user in Firebase Auth
-    let userRecord;
-    try {
-      userRecord = await auth.getUserByEmail(email);
-    } catch (error) {
-      if (error.code === 'auth/user-not-found') {
-        // For this system, we assume the user has already signed up in the main app.
-        // If not, you could create a user here, but it's better to ensure they exist first.
-        return { statusCode: 404, body: JSON.stringify({ error: 'User not found. Please sign up in the tool first.' }) };
-      }
-      throw error;
-    }
-
-    const userId = userRecord.uid;
-    const startDate = new Date();
+    const now = new Date();
     let endDate = new Date();
+    let durationDays = 0;
 
-    // Calculate end date based on the plan
+    // Determine the subscription end date based on the planId
     switch (planId) {
       case 'trial':
-        endDate.setDate(startDate.getDate() + 14);
+        durationDays = 14;
         break;
       case 'monthly':
-        endDate.setMonth(startDate.getMonth() + 1);
+        durationDays = 30;
         break;
       case 'six-months':
-        endDate.setMonth(startDate.getMonth() + 6);
+        durationDays = 180;
         break;
       case 'yearly':
-        endDate.setFullYear(startDate.getFullYear() + 1);
+        durationDays = 365;
         break;
       default:
-        return { statusCode: 400, body: JSON.stringify({ error: 'Invalid planId' }) };
+        return { statusCode: 400, body: JSON.stringify({ error: 'Invalid planId provided.' }) };
     }
+    
+    endDate.setDate(now.getDate() + durationDays);
 
-    // Store subscription details in Firestore
-    const subscriptionRef = db.collection('subscriptions').doc(userId);
-    await subscriptionRef.set({
-      userId: userId,
-      userEmail: email,
+    // Create the subscription data object
+    const subscriptionData = {
       planId: planId,
-      startDate: admin.firestore.Timestamp.fromDate(startDate),
+      userId: uid,
+      userEmail: email || null,
+      userName: name || null,
+      startDate: admin.firestore.Timestamp.fromDate(now),
       endDate: admin.firestore.Timestamp.fromDate(endDate),
       status: 'active',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    // Save the subscription document in Firestore with the user's UID as the document ID
+    await db.collection('subscriptions').doc(uid).set(subscriptionData);
+
+    console.log(`Successfully created/updated subscription for UID: ${uid}, Plan: ${planId}`);
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ success: true, message: 'Subscription created successfully.' }),
+      body: JSON.stringify({ 
+        success: true, 
+        message: 'Subscription activated successfully.',
+        subscription: {
+            planId: subscriptionData.planId,
+            endDate: subscriptionData.endDate.toDate().toISOString()
+        }
+      }),
     };
 
   } catch (error) {
-    console.error('Error in create-subscription function:', error);
+    console.error('Subscription Function Error:', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'An internal server error occurred.' }),
+      body: JSON.stringify({ error: 'Internal Server Error: Could not activate subscription.' }),
     };
   }
 };
+
