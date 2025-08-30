@@ -1,5 +1,6 @@
 // Netlify Function: create-subscription.js
-// This function finds an existing user and creates a subscription document for them in Firestore.
+// This function finds an existing user or creates a new one for a free trial,
+// then creates a subscription document for them in Firestore.
 
 const admin = require('firebase-admin');
 
@@ -40,25 +41,47 @@ exports.handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields: planId and email.' }) };
     }
 
-    // --- NEW, MORE RELIABLE LOGIC ---
-    // The function will now only find existing users. It will NOT create new ones.
+    // --- UPDATED LOGIC TO HANDLE NEW TRIAL USERS ---
     let userRecord;
     try {
+        // Try to get an existing user by their email.
         userRecord = await auth.getUserByEmail(email);
         console.log(`SUCCESS: Found existing user with UID: ${userRecord.uid}`);
     } catch (error) {
-        // If the user does not exist, send a clear error message back to the payment page.
+        // Check if the error is because the user was not found.
         if (error.code === 'auth/user-not-found') {
-            console.error(`ERROR: User not found for email: ${email}. The user must sign up first.`);
-            return {
-                statusCode: 404, // 404 Not Found
-                body: JSON.stringify({ error: `Account for ${email} not found. Please sign up for a free account in the Trading Journal tool before getting a subscription.` })
-            };
+            // *** FIX ***
+            // If the user doesn't exist, we will ONLY create a new account if it's for a free trial.
+            if (planId === 'trial') {
+                console.log(`User not found for 'trial' plan. Creating new account for ${email}.`);
+                try {
+                    // Create a new user in Firebase Authentication.
+                    // Note: This user is created without a password. They will need to use the 
+                    // "Forgot Password" feature on your journal's login page to set their password for the first time.
+                    userRecord = await auth.createUser({
+                        email: email,
+                        displayName: name || '',
+                    });
+                    console.log(`SUCCESS: Created new user for trial with UID: ${userRecord.uid}`);
+                } catch (creationError) {
+                    console.error(`ERROR: Failed to create new user during trial signup for email: ${email}`, creationError);
+                    return { statusCode: 500, body: JSON.stringify({ error: `Could not create account: ${creationError.message}` }) };
+                }
+            } else {
+                // For PAID plans, the original, correct behavior is maintained. The user MUST exist.
+                console.error(`ERROR: User not found for paid plan (${planId}) with email: ${email}.`);
+                return {
+                    statusCode: 404,
+                    body: JSON.stringify({ error: `Account for ${email} not found. Please sign up in the Trading Journal before buying a plan.` })
+                };
+            }
+        } else {
+            // For any other authentication errors (e.g., network issues), throw them to be handled by the main error catcher.
+            console.error(`ERROR: An unexpected authentication error occurred for email: ${email}`, error);
+            throw error;
         }
-        // For any other authentication errors, throw them to be handled by the main error catcher.
-        throw error;
     }
-
+    
     const uid = userRecord.uid;
     const now = new Date();
     let endDate = new Date();
@@ -110,4 +133,3 @@ exports.handler = async (event) => {
     };
   }
 };
-
