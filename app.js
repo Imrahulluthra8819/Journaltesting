@@ -19,11 +19,12 @@ class TradingJournalApp {
 
     // --- APP STATE ---
     this.currentUser = null;
+    this.subscription = null; // <-- NEW: To store subscription status
     this.allTrades = [];
     this.allConfidence = [];
     this.allNotes = [];
     this.allRules = []; // New state for Rulebook
-    this.currentEditingNoteId = null; 
+    this.currentEditingNoteId = null;
     this.charts = {};
     this.forecastChart = null; // New property for forecast chart
     this.mainListenersAttached = false;
@@ -45,19 +46,70 @@ class TradingJournalApp {
     this.handleAuthStateChange();
   }
 
-  /* ------------------------------- AUTH ---------------------------------- */
+  /* ------------------------------- AUTH & SUBSCRIPTION ---------------------------------- */
+
+  async checkSubscriptionStatus() {
+      if (!this.currentUser) return false;
+
+      const subRef = this.db.collection('subscriptions').doc(this.currentUser.uid);
+      const doc = await subRef.get();
+
+      if (!doc.exists) {
+          console.log('[SUB] No subscription document found.');
+          this.subscription = { active: false, reason: 'not_found' };
+          return false;
+      }
+      
+      const subData = doc.data();
+      const endDate = subData.endDate.toDate();
+      const now = new Date();
+
+      if (endDate < now) {
+          console.log('[SUB] Subscription expired on:', endDate);
+          this.subscription = { active: false, reason: 'expired', endDate };
+          return false;
+      }
+      
+      console.log('[SUB] Active subscription found. Ends on:', endDate);
+      this.subscription = { active: true, ...subData };
+      return true;
+  }
+  
+  showSubscriptionExpiredScreen() {
+      document.getElementById('authScreen').style.display = 'none';
+      document.getElementById('mainApp').classList.add('hidden');
+      const expiredScreen = document.getElementById('subscriptionExpiredScreen');
+      if (expiredScreen) {
+        expiredScreen.classList.remove('hidden');
+        const reasonEl = document.getElementById('expiredReason');
+        if (this.subscription?.reason === 'expired') {
+            reasonEl.textContent = `Your subscription expired on ${this.subscription.endDate.toLocaleDateString()}. Please renew to continue.`;
+        } else {
+            reasonEl.textContent = 'No active subscription found for this account. Please purchase a plan to get access.';
+        }
+      }
+  }
 
   handleAuthStateChange() {
     this.auth.onAuthStateChanged(async (user) => {
       if (user) {
         console.log('[AUTH] User is signed in:', user.uid);
         this.currentUser = user;
-        await this.loadUserData();
-        this.showMainApp();
-        document.getElementById('aiChatWidget')?.classList.remove('hidden');
+
+        const hasActiveSubscription = await this.checkSubscriptionStatus(); // <-- NEW: Check subscription
+
+        if (hasActiveSubscription) {
+            await this.loadUserData();
+            this.showMainApp();
+            document.getElementById('aiChatWidget')?.classList.remove('hidden');
+        } else {
+            this.showSubscriptionExpiredScreen();
+        }
+
       } else {
         console.log('[AUTH] User is signed out.');
         this.currentUser = null;
+        this.subscription = null;
         this.allTrades = [];
         this.allConfidence = [];
         this.allNotes = [];
@@ -67,6 +119,7 @@ class TradingJournalApp {
         if (this.forecastChart) this.forecastChart.destroy(); // Clean up forecast chart on logout
         this.showAuthScreen();
         document.getElementById('aiChatWidget')?.classList.add('hidden');
+        document.getElementById('subscriptionExpiredScreen')?.classList.add('hidden');
       }
     });
   }
@@ -113,7 +166,7 @@ class TradingJournalApp {
           return;
         }
         await this.auth.createUserWithEmailAndPassword(email, password);
-        this.showToast('Signup successful! You can now log in.', 'success');
+        this.showToast('Signup successful! Please get a subscription to start.', 'success');
         signupForm.reset();
         this.switchAuthTab('login');
       } catch (error) {
@@ -128,6 +181,12 @@ class TradingJournalApp {
     if (googleSignInBtn) {
       googleSignInBtn.addEventListener('click', () => this.signInWithGoogle());
     }
+
+    // <-- NEW: Listener for the logout button on the expired screen
+    const expiredLogoutBtn = document.getElementById('expiredLogoutBtn');
+    if (expiredLogoutBtn) {
+        expiredLogoutBtn.addEventListener('click', () => this.logout());
+    }
   }
 
   async signInWithGoogle() {
@@ -135,7 +194,7 @@ class TradingJournalApp {
     try {
       this.clearAuthErrors();
       await this.auth.signInWithPopup(provider);
-      this.showToast('Successfully signed in with Google!', 'success');
+      // Auth state change will handle the rest
     } catch (error) {
       console.error('[AUTH] Google Sign-In Error:', error);
       this.showAuthError('login-password-error', `Google Sign-In Failed: ${error.message}`);
@@ -207,11 +266,13 @@ class TradingJournalApp {
   showAuthScreen() {
     document.getElementById('authScreen').style.display = 'flex';
     document.getElementById('mainApp').classList.add('hidden');
+    document.getElementById('subscriptionExpiredScreen')?.classList.add('hidden');
   }
 
   showMainApp() {
     document.getElementById('authScreen').style.display = 'none';
     document.getElementById('mainApp').classList.remove('hidden');
+    document.getElementById('subscriptionExpiredScreen')?.classList.add('hidden');
     if (!this.mainListenersAttached) {
       this.attachMainListeners();
       this.mainListenersAttached = true;
@@ -1437,7 +1498,7 @@ class TradingJournalApp {
                   <td>${followed} / ${totalTrades}</td>
                   <td>
                       <div class="progress-bar">
-                          <div class="progress-bar-fill" style="width: ${adherence}%">${adherence}%</div>
+                          <div class="progress-bar-fill" style="width: ${adherence}%;">${adherence}%</div>
                       </div>
                   </td>
               </tr>
@@ -1837,3 +1898,4 @@ class TradingJournalApp {
 
 // Initialize the app
 window.app = new TradingJournalApp();
+
