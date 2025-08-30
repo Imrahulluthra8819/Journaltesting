@@ -1,38 +1,32 @@
-// This log will run the moment the file is loaded by Netlify
-console.log("--- [START] create-subscription.js file is executing ---");
+// Netlify Function: create-subscription.js
+// This function finds an existing user and creates a subscription document for them in Firestore.
 
 const admin = require('firebase-admin');
-// This log confirms the 'firebase-admin' package was found and loaded
-console.log("--- [OK] 'firebase-admin' package required successfully ---");
 
+// This block initializes the connection to your Firebase database.
+// It uses the environment variables you set up in your Netlify project.
 try {
-    // This block tries to initialize the connection to your Firebase database
     if (!admin.apps.length) {
         admin.initializeApp({
             credential: admin.credential.cert({
                 projectId: process.env.FIREBASE_PROJECT_ID,
                 clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+                // The private key is formatted correctly for the server environment.
                 privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
             }),
         });
     }
-    // This log confirms the initialization was successful
-    console.log("--- [OK] Firebase Admin SDK initialized successfully ---");
 } catch (e) {
-    // This will catch any errors during initialization (e.g., bad private key)
-    console.error("--- [CRITICAL ERROR] Firebase admin initialization FAILED ---", e);
-    exports.handler = async () => ({
-        statusCode: 500,
-        body: JSON.stringify({ error: "CRITICAL: Firebase initialization failed. Check the function logs on Netlify for details." })
-    });
-    return;
+    console.error("CRITICAL ERROR: Firebase admin initialization FAILED.", e);
+    // If initialization fails, the function will stop and log the error.
 }
 
 const db = admin.firestore();
 const auth = admin.auth();
 
-exports.handler = async (event, context) => {
-  console.log("--- [HANDLER] Function invoked with event body:", event.body);
+// This is the main function that runs when your payment page calls it.
+exports.handler = async (event) => {
+  console.log("Function invoked. Body:", event.body);
 
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -42,27 +36,27 @@ exports.handler = async (event, context) => {
     const { planId, email, name, phone, affiliateId } = JSON.parse(event.body);
 
     if (!planId || !email) {
-      console.error("--- [ERROR] Missing planId or email in request.");
-      return { statusCode: 400, body: JSON.stringify({ error: 'Missing planId or email.' }) };
+      console.error("ERROR: Missing planId or email in request.");
+      return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields: planId and email.' }) };
     }
 
+    // --- NEW, MORE RELIABLE LOGIC ---
+    // The function will now only find existing users. It will NOT create new ones.
     let userRecord;
     try {
         userRecord = await auth.getUserByEmail(email);
+        console.log(`SUCCESS: Found existing user with UID: ${userRecord.uid}`);
     } catch (error) {
+        // If the user does not exist, send a clear error message back to the payment page.
         if (error.code === 'auth/user-not-found') {
-            console.log(`--- [INFO] User not found for ${email}. Creating new user. ---`);
-            userRecord = await auth.createUser({
-                email: email,
-                displayName: name,
-                // For security, it's better to send a password reset/setup email
-                // than to create a user with a temporary password here.
-            });
-            console.log(`--- [SUCCESS] Created new user with UID: ${userRecord.uid}`);
-        } else {
-            // For any other auth error, re-throw it to be caught by the outer catch block
-            throw error;
+            console.error(`ERROR: User not found for email: ${email}. The user must sign up first.`);
+            return {
+                statusCode: 404, // 404 Not Found
+                body: JSON.stringify({ error: `Account for ${email} not found. Please sign up for a free account in the Trading Journal tool before getting a subscription.` })
+            };
         }
+        // For any other authentication errors, throw them to be handled by the main error catcher.
+        throw error;
     }
 
     const uid = userRecord.uid;
@@ -70,18 +64,20 @@ exports.handler = async (event, context) => {
     let endDate = new Date();
     let durationDays = 0;
 
+    // Calculate the subscription end date based on the planId received.
     switch (planId) {
       case 'trial': durationDays = 14; break;
       case 'monthly': durationDays = 30; break;
       case 'six-months': durationDays = 180; break;
       case 'yearly': durationDays = 365; break;
       default:
-        console.error(`--- [ERROR] Invalid planId received: ${planId}`);
+        console.error(`ERROR: Invalid planId received: ${planId}`);
         return { statusCode: 400, body: JSON.stringify({ error: 'Invalid planId provided.' }) };
     }
     
     endDate.setDate(now.getDate() + durationDays);
 
+    // Prepare the subscription data to be saved in Firestore.
     const subscriptionData = {
       planId,
       userId: uid,
@@ -92,22 +88,25 @@ exports.handler = async (event, context) => {
       startDate: admin.firestore.Timestamp.fromDate(now),
       endDate: admin.firestore.Timestamp.fromDate(endDate),
       status: 'active',
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    await db.collection('subscriptions').doc(uid).set(subscriptionData);
-    console.log(`--- [SUCCESS] Subscription created for UID: ${uid}, Plan: ${planId}`);
+    // Create or update the subscription document in the 'subscriptions' collection.
+    await db.collection('subscriptions').doc(uid).set(subscriptionData, { merge: true });
+    console.log(`SUCCESS: Subscription created/updated for UID: ${uid}, Plan: ${planId}`);
 
+    // Send a success response back to the payment page.
     return {
       statusCode: 200,
-      body: JSON.stringify({ success: true, message: 'Subscription activated successfully.', uid: uid }),
+      body: JSON.stringify({ success: true, message: 'Subscription activated successfully.' }),
     };
 
   } catch (error) {
-    console.error('--- [CRITICAL ERROR] Unhandled exception in handler ---', error);
+    // This is the final safety net. It catches any unexpected errors.
+    console.error('CRITICAL ERROR: Unhandled exception in handler.', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'Internal Server Error: Could not activate subscription.' }),
+      body: JSON.stringify({ error: 'An internal server error occurred. Could not activate subscription.' }),
     };
   }
 };
