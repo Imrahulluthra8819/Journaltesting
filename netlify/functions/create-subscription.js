@@ -7,53 +7,68 @@ const admin = require('firebase-admin');
 let db, auth;
 
 // This block initializes the connection to your Firebase database.
-// It uses the environment variables you set up in your Netlify project.
 try {
     if (!admin.apps.length) {
         admin.initializeApp({
             credential: admin.credential.cert({
                 projectId: process.env.FIREBASE_PROJECT_ID,
                 clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-                // The private key is formatted correctly for the server environment.
                 privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
             }),
         });
     }
-    // Initialize db and auth only after a successful connection.
     db = admin.firestore();
     auth = admin.auth();
 } catch (e) {
     console.error("CRITICAL ERROR: Firebase admin initialization FAILED. Check your environment variables.", e);
 }
 
-// This is the main function that runs when your payment page calls it.
 exports.handler = async (event) => {
-  // *** FIX ***
-  // Add a check right at the start to ensure Firebase initialized correctly.
-  // If not, it means the environment variables are wrong.
+  // *** FIX: ADD CORS HEADERS TO ALLOW REQUESTS FROM YOUR PAYMENT PAGE ***
+  
+  // IMPORTANT: Replace this with the actual URL of your deployed payment page on Netlify.
+  const allowedOrigin = 'https://traderlog5.netlify.app/rpp1'; 
+
+  const headers = {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  };
+
+  // The browser sends an OPTIONS request first to check permissions.
+  // We need to handle this "preflight" request.
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 204, // No Content
+      headers,
+      body: ''
+    };
+  }
+
   if (!db || !auth) {
-      console.error("Firebase Admin SDK not initialized. This is likely due to missing or incorrect environment variables in Netlify.");
+      console.error("Firebase Admin SDK not initialized. This is likely due to missing or incorrect environment variables.");
       return {
           statusCode: 500,
+          headers, // Include headers in error responses
           body: JSON.stringify({ error: "Server configuration error. Please contact support." })
       };
   }
   
-  console.log("Function invoked. Body:", event.body);
-
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+    return { 
+        statusCode: 405, 
+        headers, // Include headers in error responses
+        body: 'Method Not Allowed' 
+    };
   }
 
   try {
     const { planId, email, name, phone, affiliateId } = JSON.parse(event.body);
 
     if (!planId || !email) {
-      console.error("ERROR: Missing planId or email in request.");
-      return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields: planId and email.' }) };
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields: planId and email.' }) };
     }
 
-    // --- LOGIC TO HANDLE NEW TRIAL USERS ---
     let userRecord;
     try {
         userRecord = await auth.getUserByEmail(email);
@@ -63,19 +78,17 @@ exports.handler = async (event) => {
             if (planId === 'trial') {
                 console.log(`User not found for 'trial' plan. Creating new account for ${email}.`);
                 try {
-                    userRecord = await auth.createUser({
-                        email: email,
-                        displayName: name || '',
-                    });
+                    userRecord = await auth.createUser({ email, displayName: name || '' });
                     console.log(`SUCCESS: Created new user for trial with UID: ${userRecord.uid}`);
                 } catch (creationError) {
                     console.error(`ERROR: Failed to create new user during trial signup for email: ${email}`, creationError);
-                    return { statusCode: 500, body: JSON.stringify({ error: `Could not create account: ${creationError.message}` }) };
+                    return { statusCode: 500, headers, body: JSON.stringify({ error: `Could not create account: ${creationError.message}` }) };
                 }
             } else {
                 console.error(`ERROR: User not found for paid plan (${planId}) with email: ${email}.`);
                 return {
                     statusCode: 404,
+                    headers,
                     body: JSON.stringify({ error: `Account for ${email} not found. Please sign up in the Trading Journal before buying a plan.` })
                 };
             }
@@ -97,7 +110,7 @@ exports.handler = async (event) => {
       case 'yearly': durationDays = 365; break;
       default:
         console.error(`ERROR: Invalid planId received: ${planId}`);
-        return { statusCode: 400, body: JSON.stringify({ error: 'Invalid planId provided.' }) };
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid planId provided.' }) };
     }
     
     endDate.setDate(now.getDate() + durationDays);
@@ -120,6 +133,7 @@ exports.handler = async (event) => {
 
     return {
       statusCode: 200,
+      headers,
       body: JSON.stringify({ success: true, message: 'Subscription activated successfully.' }),
     };
 
@@ -127,6 +141,7 @@ exports.handler = async (event) => {
     console.error('CRITICAL ERROR: Unhandled exception in handler.', error);
     return {
       statusCode: 500,
+      headers,
       body: JSON.stringify({ error: 'An internal server error occurred. Could not activate subscription.' }),
     };
   }
