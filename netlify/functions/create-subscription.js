@@ -24,81 +24,74 @@ try {
 }
 
 exports.handler = async (event) => {
-  // *** FIX: DYNAMICALLY HANDLE CORS FOR ANY AFFILIATE LINK ***
+  // *** FIX: ADD INTENSIVE LOGGING AND A TEMPORARY WILDCARD FOR DEBUGGING ***
 
-  // IMPORTANT: Replace this placeholder with the actual URL of your deployed payment page.
-  // You can add more URLs to this list if needed (e.g., for local testing).
-  const allowedOrigins = [
-    'https://traderlog5.netlify.app',
-    // 'http://localhost:8888' // Example for local development
-  ];
-
-  const requestOrigin = event.headers.origin;
-  let headers = {};
-
-  // Check if the incoming request's origin is in our list of approved sites.
-  if (allowedOrigins.includes(requestOrigin)) {
-    headers = {
-      'Access-Control-Allow-Origin': requestOrigin, // Respond with the specific origin that made the request
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS'
-    };
-  }
+  console.log('[LOG] Function execution started.');
   
-  // The browser sends an OPTIONS request first to check permissions.
+  // For debugging, we will temporarily allow all origins.
+  // This helps confirm if the issue is CORS-related or something else.
+  const headers = {
+    'Access-Control-Allow-Origin': '*', // TEMPORARY: Allow any origin
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  };
+
   if (event.httpMethod === 'OPTIONS') {
+    console.log('[LOG] Responding to preflight OPTIONS request.');
     return { statusCode: 204, headers, body: '' };
   }
 
   if (!db || !auth) {
-      console.error("Firebase Admin SDK not initialized. This is likely due to missing or incorrect environment variables.");
+      console.error("[LOG] CRITICAL: Firebase Admin SDK not initialized. Function cannot proceed.");
       return {
           statusCode: 500,
           headers,
           body: JSON.stringify({ error: "Server configuration error. Please contact support." })
       };
   }
+  console.log('[LOG] Firebase Admin SDK is initialized.');
   
   if (event.httpMethod !== 'POST') {
-    return { 
-        statusCode: 405, 
-        headers,
-        body: 'Method Not Allowed' 
-    };
+    return { statusCode: 405, headers, body: 'Method Not Allowed' };
+  }
+
+  let body;
+  try {
+    body = JSON.parse(event.body);
+    console.log('[LOG] Successfully parsed request body:', body);
+  } catch (parseError) {
+    console.error('[LOG] CRITICAL: Could not parse request body.', parseError);
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid request format.' }) };
   }
 
   try {
-    const { planId, email, name, phone, affiliateId } = JSON.parse(event.body);
+    const { planId, email, name, phone, affiliateId } = body;
 
     if (!planId || !email) {
+      console.error('[LOG] ERROR: Missing planId or email in request.');
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields: planId and email.' }) };
     }
+    console.log(`[LOG] Processing request for email: ${email}, plan: ${planId}`);
 
     let userRecord;
     try {
         userRecord = await auth.getUserByEmail(email);
-        console.log(`SUCCESS: Found existing user with UID: ${userRecord.uid}`);
+        console.log(`[LOG] SUCCESS: Found existing user with UID: ${userRecord.uid}`);
     } catch (error) {
         if (error.code === 'auth/user-not-found') {
             if (planId === 'trial') {
-                console.log(`User not found for 'trial' plan. Creating new account for ${email}.`);
-                try {
-                    userRecord = await auth.createUser({ email, displayName: name || '' });
-                    console.log(`SUCCESS: Created new user for trial with UID: ${userRecord.uid}`);
-                } catch (creationError) {
-                    console.error(`ERROR: Failed to create new user during trial signup for email: ${email}`, creationError);
-                    return { statusCode: 500, headers, body: JSON.stringify({ error: `Could not create account: ${creationError.message}` }) };
-                }
+                console.log(`[LOG] User not found for 'trial' plan. Creating new account for ${email}.`);
+                userRecord = await auth.createUser({ email, displayName: name || '' });
+                console.log(`[LOG] SUCCESS: Created new user for trial with UID: ${userRecord.uid}`);
             } else {
-                console.error(`ERROR: User not found for paid plan (${planId}) with email: ${email}.`);
+                console.error(`[LOG] ERROR: User not found for paid plan (${planId}) with email: ${email}.`);
                 return {
-                    statusCode: 404,
-                    headers,
+                    statusCode: 404, headers,
                     body: JSON.stringify({ error: `Account for ${email} not found. Please sign up in the Trading Journal before buying a plan.` })
                 };
             }
         } else {
-            console.error(`ERROR: An unexpected authentication error occurred for email: ${email}`, error);
+            console.error(`[LOG] ERROR: An unexpected authentication error occurred for email: ${email}`, error);
             throw error;
         }
     }
@@ -114,40 +107,33 @@ exports.handler = async (event) => {
       case 'six-months': durationDays = 180; break;
       case 'yearly': durationDays = 365; break;
       default:
-        console.error(`ERROR: Invalid planId received: ${planId}`);
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid planId provided.' }) };
     }
     
     endDate.setDate(now.getDate() + durationDays);
+    console.log(`[LOG] Subscription for UID ${uid} will end on: ${endDate.toISOString()}`);
 
     const subscriptionData = {
-      planId,
-      userId: uid,
-      userEmail: email,
-      userName: name || null,
-      userPhone: phone || null,
-      affiliateId: affiliateId || 'direct',
+      planId, userId: uid, userEmail: email, userName: name || null,
+      userPhone: phone || null, affiliateId: affiliateId || 'direct',
       startDate: admin.firestore.Timestamp.fromDate(now),
       endDate: admin.firestore.Timestamp.fromDate(endDate),
-      status: 'active',
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      status: 'active', updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
     await db.collection('subscriptions').doc(uid).set(subscriptionData, { merge: true });
-    console.log(`SUCCESS: Subscription created/updated for UID: ${uid}, Plan: ${planId}`);
+    console.log(`[LOG] SUCCESS: Subscription document created/updated in Firestore for UID: ${uid}`);
 
     return {
-      statusCode: 200,
-      headers,
+      statusCode: 200, headers,
       body: JSON.stringify({ success: true, message: 'Subscription activated successfully.' }),
     };
 
   } catch (error) {
-    console.error('CRITICAL ERROR: Unhandled exception in handler.', error);
+    console.error('[LOG] CRITICAL: Unhandled exception in main handler.', error);
     return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'An internal server error occurred. Could not activate subscription.' }),
+      statusCode: 500, headers,
+      body: JSON.stringify({ error: 'An internal server error occurred.' }),
     };
   }
 };
