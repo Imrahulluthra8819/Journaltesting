@@ -21,19 +21,17 @@ try {
 } catch (e) {
     // This will catch any errors during initialization (e.g., bad private key)
     console.error("--- [CRITICAL ERROR] Firebase admin initialization FAILED ---", e);
-    // If initialization fails, we stop everything and report the error
     exports.handler = async () => ({
         statusCode: 500,
         body: JSON.stringify({ error: "CRITICAL: Firebase initialization failed. Check the function logs on Netlify for details." })
     });
-    // This return prevents the rest of the file from running if initialization fails
     return;
 }
 
 const db = admin.firestore();
+const auth = admin.auth();
 
 exports.handler = async (event, context) => {
-  // This log runs only when the function is actually called by your website
   console.log("--- [HANDLER] Function invoked with event body:", event.body);
 
   if (event.httpMethod !== 'POST') {
@@ -41,13 +39,33 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    const { planId, uid, email, name } = JSON.parse(event.body);
+    const { planId, email, name, phone, affiliateId } = JSON.parse(event.body);
 
-    if (!planId || !uid) {
-      console.error("--- [ERROR] Missing planId or uid in request.");
-      return { statusCode: 400, body: JSON.stringify({ error: 'Missing planId or uid.' }) };
+    if (!planId || !email) {
+      console.error("--- [ERROR] Missing planId or email in request.");
+      return { statusCode: 400, body: JSON.stringify({ error: 'Missing planId or email.' }) };
     }
 
+    let userRecord;
+    try {
+        userRecord = await auth.getUserByEmail(email);
+    } catch (error) {
+        if (error.code === 'auth/user-not-found') {
+            console.log(`--- [INFO] User not found for ${email}. Creating new user. ---`);
+            userRecord = await auth.createUser({
+                email: email,
+                displayName: name,
+                // For security, it's better to send a password reset/setup email
+                // than to create a user with a temporary password here.
+            });
+            console.log(`--- [SUCCESS] Created new user with UID: ${userRecord.uid}`);
+        } else {
+            // For any other auth error, re-throw it to be caught by the outer catch block
+            throw error;
+        }
+    }
+
+    const uid = userRecord.uid;
     const now = new Date();
     let endDate = new Date();
     let durationDays = 0;
@@ -65,7 +83,12 @@ exports.handler = async (event, context) => {
     endDate.setDate(now.getDate() + durationDays);
 
     const subscriptionData = {
-      planId, userId: uid, userEmail: email || null, userName: name || null,
+      planId,
+      userId: uid,
+      userEmail: email,
+      userName: name || null,
+      userPhone: phone || null,
+      affiliateId: affiliateId || 'direct',
       startDate: admin.firestore.Timestamp.fromDate(now),
       endDate: admin.firestore.Timestamp.fromDate(endDate),
       status: 'active',
@@ -77,7 +100,7 @@ exports.handler = async (event, context) => {
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ success: true, message: 'Subscription activated successfully.' }),
+      body: JSON.stringify({ success: true, message: 'Subscription activated successfully.', uid: uid }),
     };
 
   } catch (error) {
