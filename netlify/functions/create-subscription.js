@@ -24,32 +24,37 @@ try {
 }
 
 exports.handler = async (event) => {
-  // *** FIX: ADD CORS HEADERS TO ALLOW REQUESTS FROM YOUR PAYMENT PAGE ***
-  
-  // IMPORTANT: Replace this with the actual URL of your deployed payment page on Netlify.
-  const allowedOrigin = 'https://traderlog5.netlify.app/rpp1'; 
+  // *** FIX: DYNAMICALLY HANDLE CORS FOR ANY AFFILIATE LINK ***
 
-  const headers = {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS'
-  };
+  // IMPORTANT: Replace this placeholder with the actual URL of your deployed payment page.
+  // You can add more URLs to this list if needed (e.g., for local testing).
+  const allowedOrigins = [
+    'https://traderlog5.netlify.app',
+    // 'http://localhost:8888' // Example for local development
+  ];
 
-  // The browser sends an OPTIONS request first to check permissions.
-  // We need to handle this "preflight" request.
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 204, // No Content
-      headers,
-      body: ''
+  const requestOrigin = event.headers.origin;
+  let headers = {};
+
+  // Check if the incoming request's origin is in our list of approved sites.
+  if (allowedOrigins.includes(requestOrigin)) {
+    headers = {
+      'Access-Control-Allow-Origin': requestOrigin, // Respond with the specific origin that made the request
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS'
     };
+  }
+  
+  // The browser sends an OPTIONS request first to check permissions.
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers, body: '' };
   }
 
   if (!db || !auth) {
       console.error("Firebase Admin SDK not initialized. This is likely due to missing or incorrect environment variables.");
       return {
           statusCode: 500,
-          headers, // Include headers in error responses
+          headers,
           body: JSON.stringify({ error: "Server configuration error. Please contact support." })
       };
   }
@@ -57,7 +62,7 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { 
         statusCode: 405, 
-        headers, // Include headers in error responses
+        headers,
         body: 'Method Not Allowed' 
     };
   }
