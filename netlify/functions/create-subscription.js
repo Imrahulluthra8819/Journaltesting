@@ -24,6 +24,9 @@ try {
 }
 
 exports.handler = async (event) => {
+  // *** DIAGNOSTIC LOG: This message is added to confirm the new version is deployed. ***
+  console.log("--- Running create-subscription function v3 (with affiliateId fix) ---");
+
   const headers = {
     'Access-Control-Allow-Origin': '*', // In production, restrict this to your app's domain
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -55,7 +58,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    // *** FIX: Corrected variable name from affiliate_id to affiliateId to match frontend payload ***
+    // *** FIX: Corrected variable name to affiliateId to match frontend payload ***
     const { planId, email, name, phone, affiliateId } = body;
 
     if (!planId || !email) {
@@ -68,19 +71,16 @@ exports.handler = async (event) => {
         userRecord = await auth.getUserByEmail(email);
     } catch (error) {
         if (error.code === 'auth/user-not-found') {
-            // Only create a new user if they are signing up for a trial
             if (planId === 'trial') {
                 userRecord = await auth.createUser({ email, displayName: name || '' });
                 isNewUser = true;
             } else {
-                // For paid plans, the user must already exist.
                 return {
                     statusCode: 404, headers,
                     body: JSON.stringify({ error: `Account for ${email} not found. Please sign up in the Trading Journal before buying a plan.` })
                 };
             }
         } else {
-            // Re-throw other auth errors
             throw error;
         }
     }
@@ -88,14 +88,11 @@ exports.handler = async (event) => {
     const uid = userRecord.uid;
     const subscriptionRef = db.collection('subscriptions').doc(uid);
 
-    // *** FIX: ADDED LOGIC TO PREVENT REPEATED TRIALS ***
-    // If the plan is 'trial' and it's NOT a new user, check for an existing subscription.
     if (planId === 'trial' && !isNewUser) {
         const doc = await subscriptionRef.get();
-        // If a subscription document already exists, block the new trial.
         if (doc.exists) {
             return {
-                statusCode: 403, // Forbidden
+                statusCode: 403,
                 headers,
                 body: JSON.stringify({ error: 'A free trial has already been used for this account.' }),
             };
@@ -125,7 +122,6 @@ exports.handler = async (event) => {
       status: 'active', updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    // Use { merge: true } to update existing subscriptions or create a new one
     await subscriptionRef.set(subscriptionData, { merge: true });
 
     return {
@@ -141,3 +137,4 @@ exports.handler = async (event) => {
     };
   }
 };
+
