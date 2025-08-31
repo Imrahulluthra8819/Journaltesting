@@ -19,17 +19,17 @@ class TradingJournalApp {
 
     // --- APP STATE ---
     this.currentUser = null;
-    this.subscription = null; 
+    this.subscription = null;
     this.allTrades = [];
     this.allConfidence = [];
     this.allNotes = [];
-    this.allRules = []; 
+    this.allRules = [];
     this.currentEditingNoteId = null;
     this.charts = {};
-    this.forecastChart = null; 
+    this.forecastChart = null;
     this.mainListenersAttached = false;
     this.currentCalendarDate = new Date();
-    this.currencySymbol = '₹'; 
+    this.currencySymbol = '₹';
     this.tickerWidgetLoaded = false;
     this.chartsWidgetLoaded = false;
 
@@ -48,83 +48,97 @@ class TradingJournalApp {
   }
 
   /* ------------------------------- AUTH & SUBSCRIPTION ---------------------------------- */
-  
+
   async handleMagicLinkSignIn() {
-      if (this.auth.isSignInWithEmailLink(window.location.href)) {
-          let email = window.localStorage.getItem('emailForSignIn');
-          if (!email) {
-              email = window.prompt('Please provide your email for confirmation');
-          }
-          if (email) {
-              try {
-                  await this.auth.signInWithEmailLink(email, window.location.href);
-                  window.localStorage.removeItem('emailForSignIn');
-                  if (window.history && window.history.replaceState) {
-                      window.history.replaceState({}, document.title, window.location.pathname);
-                  }
-                  this.showToast('Successfully signed in!', 'success');
-              } catch (error) {
-                  console.error("Magic link sign-in error", error);
-                  this.showAuthError('login-email-error', `Error signing in: ${error.message}`);
-              }
-          } else {
-             this.showAuthError('login-email-error', 'Email is required to complete sign-in.');
-          }
+    if (this.auth.isSignInWithEmailLink(window.location.href)) {
+      let email = window.localStorage.getItem('emailForSignIn');
+      if (!email) {
+        email = window.prompt('Please provide your email for confirmation');
       }
+      if (email) {
+        try {
+          await this.auth.signInWithEmailLink(email, window.location.href);
+          window.localStorage.removeItem('emailForSignIn');
+          if (window.history && window.history.replaceState) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+          this.showToast('Successfully signed in!', 'success');
+        } catch (error) {
+          console.error("Magic link sign-in error", error);
+          this.showAuthError('login-email-error', `Error signing in: ${error.message}`);
+        }
+      } else {
+        this.showAuthError('login-email-error', 'Email is required to complete sign-in.');
+      }
+    }
   }
 
   async checkSubscriptionStatus() {
-      if (!this.currentUser) return false;
+    if (!this.currentUser) return false;
 
-      const adminRef = this.db.collection('admins').doc(this.currentUser.uid);
-      try {
-          const adminDoc = await adminRef.get();
-          if (adminDoc.exists) {
-              console.log("[AUTH] Admin user found in Firestore. Granting access.");
-              this.subscription = { active: true, planId: 'admin', reason: 'admin_override' };
-              return true;
-          }
-      } catch (error) {
-          console.error("[AUTH] Error reading from 'admins' collection.", error);
+    const adminRef = this.db.collection('admins').doc(this.currentUser.uid);
+    try {
+      const adminDoc = await adminRef.get();
+      if (adminDoc.exists) {
+        console.log("[AUTH] Admin user found in Firestore. Granting access.");
+        this.subscription = {
+          active: true,
+          planId: 'admin',
+          reason: 'admin_override'
+        };
+        return true;
       }
+    } catch (error) {
+      console.error("[AUTH] Error reading from 'admins' collection.", error);
+    }
 
-      const subRef = this.db.collection('subscriptions').doc(this.currentUser.uid);
-      const doc = await subRef.get();
+    const subRef = this.db.collection('subscriptions').doc(this.currentUser.uid);
+    const doc = await subRef.get();
 
-      if (!doc.exists) {
-          console.log('[SUB] No subscription document found.');
-          this.subscription = { active: false, reason: 'not_found' };
-          return false;
-      }
-      
-      const subData = doc.data();
-      const endDate = subData.endDate.toDate();
-      const now = new Date();
+    if (!doc.exists) {
+      console.log('[SUB] No subscription document found.');
+      this.subscription = {
+        active: false,
+        reason: 'not_found'
+      };
+      return false;
+    }
 
-      if (endDate < now) {
-          console.log('[SUB] Subscription expired on:', endDate);
-          this.subscription = { active: false, reason: 'expired', endDate };
-          return false;
-      }
-      
-      console.log('[SUB] Active subscription found. Ends on:', endDate);
-      this.subscription = { active: true, ...subData };
-      return true;
+    const subData = doc.data();
+    const endDate = subData.endDate.toDate();
+    const now = new Date();
+
+    if (endDate < now) {
+      console.log('[SUB] Subscription expired on:', endDate);
+      this.subscription = {
+        active: false,
+        reason: 'expired',
+        endDate
+      };
+      return false;
+    }
+
+    console.log('[SUB] Active subscription found. Ends on:', endDate);
+    this.subscription = {
+      active: true,
+      ...subData
+    };
+    return true;
   }
-  
+
   showSubscriptionExpiredScreen() {
-      document.getElementById('authScreen').style.display = 'none';
-      document.getElementById('mainApp').classList.add('hidden');
-      const expiredScreen = document.getElementById('subscriptionExpiredScreen');
-      if (expiredScreen) {
-        expiredScreen.classList.remove('hidden');
-        const reasonEl = document.getElementById('expiredReason');
-        if (this.subscription?.reason === 'expired') {
-            reasonEl.textContent = `Your subscription expired on ${this.subscription.endDate.toLocaleDateString()}. Please renew to continue.`;
-        } else {
-            reasonEl.textContent = 'No active subscription found for this account. Please purchase a plan to get access.';
-        }
+    document.getElementById('authScreen').style.display = 'none';
+    document.getElementById('mainApp').classList.add('hidden');
+    const expiredScreen = document.getElementById('subscriptionExpiredScreen');
+    if (expiredScreen) {
+      expiredScreen.classList.remove('hidden');
+      const reasonEl = document.getElementById('expiredReason');
+      if (this.subscription?.reason === 'expired') {
+        reasonEl.textContent = `Your subscription expired on ${this.subscription.endDate.toLocaleDateString()}. Please renew to continue.`;
+      } else {
+        reasonEl.textContent = 'No active subscription found for this account. Please purchase a plan to get access.';
       }
+    }
   }
 
   handleAuthStateChange() {
@@ -136,10 +150,10 @@ class TradingJournalApp {
         const hasActiveSubscription = await this.checkSubscriptionStatus();
 
         if (hasActiveSubscription) {
-            await this.loadUserData();
-            this.showMainApp();
+          await this.loadUserData();
+          this.showMainApp();
         } else {
-            this.showSubscriptionExpiredScreen();
+          this.showSubscriptionExpiredScreen();
         }
 
       } else {
@@ -177,50 +191,50 @@ class TradingJournalApp {
 
     const expiredLogoutBtn = document.getElementById('expiredLogoutBtn');
     if (expiredLogoutBtn) {
-        expiredLogoutBtn.addEventListener('click', () => this.logout());
+      expiredLogoutBtn.addEventListener('click', () => this.logout());
     }
   }
-  
+
   async sendMagicLink() {
-      this.clearAuthErrors();
-      const loginForm = document.getElementById('loginFormElement');
-      const submitButton = loginForm.querySelector('button[type="submit"]');
-      const originalButtonText = submitButton.textContent;
-      const email = loginForm.email.value.trim();
+    this.clearAuthErrors();
+    const loginForm = document.getElementById('loginFormElement');
+    const submitButton = loginForm.querySelector('button[type="submit"]');
+    const originalButtonText = submitButton.textContent;
+    const email = loginForm.email.value.trim();
 
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-          this.showAuthError('login-email-error', 'Please enter a valid email address.');
-          return;
-      }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      this.showAuthError('login-email-error', 'Please enter a valid email address.');
+      return;
+    }
 
-      const resendBtn = document.getElementById('resendMagicLinkBtn');
-      submitButton.disabled = true;
-      submitButton.textContent = 'Sending...';
-      resendBtn.disabled = true;
+    const resendBtn = document.getElementById('resendMagicLinkBtn');
+    submitButton.disabled = true;
+    submitButton.textContent = 'Sending...';
+    resendBtn.disabled = true;
 
-      try {
-          const actionCodeSettings = {
-              url: window.location.href,
-              handleCodeInApp: true,
-          };
+    try {
+      const actionCodeSettings = {
+        url: window.location.href,
+        handleCodeInApp: true,
+      };
 
-          await this.auth.sendSignInLinkToEmail(email, actionCodeSettings);
-          window.localStorage.setItem('emailForSignIn', email);
+      await this.auth.sendSignInLinkToEmail(email, actionCodeSettings);
+      window.localStorage.setItem('emailForSignIn', email);
 
-          document.getElementById('loginForm').classList.remove('active');
-          const sentView = document.getElementById('magicLinkSent');
-          document.getElementById('sentToEmail').textContent = email;
-          sentView.classList.add('active');
-          
-          this.showToast('Login link sent to your email!', 'success');
+      document.getElementById('loginForm').classList.remove('active');
+      const sentView = document.getElementById('magicLinkSent');
+      document.getElementById('sentToEmail').textContent = email;
+      sentView.classList.add('active');
 
-      } catch (error) {
-          this.showAuthError('login-email-error', error.message);
-      } finally {
-          submitButton.disabled = false;
-          submitButton.textContent = originalButtonText;
-          resendBtn.disabled = false;
-      }
+      this.showToast('Login link sent to your email!', 'success');
+
+    } catch (error) {
+      this.showAuthError('login-email-error', error.message);
+    } finally {
+      submitButton.disabled = false;
+      submitButton.textContent = originalButtonText;
+      resendBtn.disabled = false;
+    }
   }
 
 
@@ -269,17 +283,28 @@ class TradingJournalApp {
     const rulesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('rules').orderBy('createdAt', 'desc').get();
     try {
       const [tradesSnapshot, confidenceSnapshot, notesSnapshot, rulesSnapshot] = await Promise.all([tradesQuery, confidenceQuery, notesQuery, rulesQuery]);
-      this.allTrades = tradesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      this.allTrades = tradesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
       console.log(`[DATA] Loaded ${this.allTrades.length} trades.`);
-      this.allConfidence = confidenceSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      this.allConfidence = confidenceSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
       console.log(`[DATA] Loaded ${this.allConfidence.length} confidence entries.`);
-      this.allNotes = notesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      this.allNotes = notesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
       console.log(`[DATA] Loaded ${this.allNotes.length} notes.`);
-      this.allRules = rulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      this.allRules = rulesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
       console.log(`[DATA] Loaded ${this.allRules.length} rules.`);
 
-    } catch (error)
-        {
+    } catch (error) {
       console.error("[DATA] Error loading user data:", error);
       this.showToast(`Error loading data: ${error.message}`, 'error');
       this.allTrades = [];
@@ -319,8 +344,8 @@ class TradingJournalApp {
     document.getElementById('logoutBtn').addEventListener('click', () => this.logout());
     document.getElementById('themeToggle').addEventListener('click', () => this.toggleTheme());
     document.getElementById('currencySelector').addEventListener('change', (e) => {
-        this.currencySymbol = e.target.value;
-        document.dispatchEvent(new CustomEvent('data-changed'));
+      this.currencySymbol = e.target.value;
+      document.dispatchEvent(new CustomEvent('data-changed'));
     });
     document.getElementById('quickAddTrade').addEventListener('click', () => this.showSection('add-trade'));
     document.getElementById('saveConfidenceBtn').addEventListener('click', () => this.saveDailyConfidence());
@@ -336,29 +361,29 @@ class TradingJournalApp {
       const activeSection = document.querySelector('.section.active');
       if (activeSection) this.showSection(activeSection.id);
     });
-    
+
     document.getElementById('showRulebookBtn').addEventListener('click', () => this.showRulebookModal());
     const rulebookForm = document.getElementById('rulebookForm');
     rulebookForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        this.saveRule();
+      e.preventDefault();
+      this.saveRule();
     });
     document.getElementById('cancelEditRuleBtn').addEventListener('click', () => this.resetRulebookForm());
 
     const navToggle = document.getElementById('navToggle');
     const navCollapse = document.getElementById('navCollapse');
     if (navToggle && navCollapse) {
-        navToggle.addEventListener('click', () => {
-            navToggle.classList.toggle('active');
-            navCollapse.classList.toggle('active');
-        });
+      navToggle.addEventListener('click', () => {
+        navToggle.classList.toggle('active');
+        navCollapse.classList.toggle('active');
+      });
 
-        navCollapse.querySelectorAll('.nav-link').forEach(link => {
-            link.addEventListener('click', () => {
-                navToggle.classList.remove('active');
-                navCollapse.classList.remove('active');
-            });
+      navCollapse.querySelectorAll('.nav-link').forEach(link => {
+        link.addEventListener('click', () => {
+          navToggle.classList.remove('active');
+          navCollapse.classList.remove('active');
         });
+      });
     }
 
     const chatBubble = document.getElementById('aiChatBubble');
@@ -391,7 +416,7 @@ class TradingJournalApp {
         }
       });
     }
-    
+
     document.getElementById('getForecastBtn').addEventListener('click', () => this.getForecast());
   }
 
@@ -402,25 +427,25 @@ class TradingJournalApp {
   }
 
   toggleTheme() {
-      const html = document.documentElement;
-      const isLight = html.getAttribute('data-color-scheme') === 'light';
+    const html = document.documentElement;
+    const isLight = html.getAttribute('data-color-scheme') === 'light';
 
-      if (isLight) {
-          html.removeAttribute('data-color-scheme');
-          document.getElementById('themeToggle').textContent = '☀️';
-      } else {
-          html.setAttribute('data-color-scheme', 'light');
-          document.getElementById('themeToggle').textContent = '🌙';
-      }
+    if (isLight) {
+      html.removeAttribute('data-color-scheme');
+      document.getElementById('themeToggle').textContent = '☀️';
+    } else {
+      html.setAttribute('data-color-scheme', 'light');
+      document.getElementById('themeToggle').textContent = '🌙';
+    }
 
-      if (document.getElementById('dashboard').classList.contains('active')) {
-          this.tickerWidgetLoaded = false;
-          this.loadTickerWidget();
-      }
-      if (document.getElementById('charts').classList.contains('active')) {
-          this.chartsWidgetLoaded = false;
-          this.renderCharts();
-      }
+    if (document.getElementById('dashboard').classList.contains('active')) {
+      this.tickerWidgetLoaded = false;
+      this.loadTickerWidget();
+    }
+    if (document.getElementById('charts').classList.contains('active')) {
+      this.chartsWidgetLoaded = false;
+      this.renderCharts();
+    }
   }
 
 
@@ -430,14 +455,30 @@ class TradingJournalApp {
     document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
     document.getElementById(id).classList.add('active');
     switch (id) {
-      case 'dashboard': this.renderDashboard(); break;
-      case 'add-trade': this.renderAddTrade(); break;
-      case 'notes': this.renderNotes(); break;
-      case 'history': this.renderHistory(); break;
-      case 'analytics': this.renderAnalytics(); break;
-      case 'ai-suggestions': this.renderAISuggestions(); break;
-      case 'reports': this.renderReports(); break;
-      case 'charts': this.renderCharts(); break;
+      case 'dashboard':
+        this.renderDashboard();
+        break;
+      case 'add-trade':
+        this.renderAddTrade();
+        break;
+      case 'notes':
+        this.renderNotes();
+        break;
+      case 'history':
+        this.renderHistory();
+        break;
+      case 'analytics':
+        this.renderAnalytics();
+        break;
+      case 'ai-suggestions':
+        this.renderAISuggestions();
+        break;
+      case 'reports':
+        this.renderReports();
+        break;
+      case 'charts':
+        this.renderCharts();
+        break;
     }
   }
 
@@ -446,14 +487,14 @@ class TradingJournalApp {
     let symbol = this.currencySymbol;
     let locale = symbol === '₹' ? 'en-IN' : 'en-US';
 
-    if(currencyCode) {
-        if (currencyCode === 'INR') symbol = '₹';
-        if (currencyCode === 'USD') symbol = '$';
-        locale = currencyCode === 'INR' ? 'en-IN' : 'en-US';
+    if (currencyCode) {
+      if (currencyCode === 'INR') symbol = '₹';
+      if (currencyCode === 'USD') symbol = '$';
+      locale = currencyCode === 'INR' ? 'en-IN' : 'en-US';
     }
 
     if (val === null || val === undefined) return `${symbol}0.00`;
-    
+
     const sign = val < 0 ? '-' : '';
     return sign + symbol + Math.abs(val).toLocaleString(locale, {
       minimumFractionDigits: 2,
@@ -463,7 +504,11 @@ class TradingJournalApp {
 
   formatDate(str) {
     if (!str) return 'N/A';
-    return new Date(str).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: '2-digit' });
+    return new Date(str).toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: '2-digit'
+    });
   }
 
   showToast(msg, type = 'info') {
@@ -476,12 +521,23 @@ class TradingJournalApp {
   }
 
   /* ---------------------- DASHBOARD & STATS ----------------------------- */
-  get trades() { return this.allTrades || []; }
-  get confidenceEntries() { return this.allConfidence || []; }
+  get trades() {
+    return this.allTrades || [];
+  }
+  get confidenceEntries() {
+    return this.allConfidence || [];
+  }
 
   calculateStats() {
     if (this.trades.length === 0) {
-      return { totalPL: 0, winRate: 0, totalTrades: 0, avgRR: '1:0', bestTrade: 0, worstTrade: 0 };
+      return {
+        totalPL: 0,
+        winRate: 0,
+        totalTrades: 0,
+        avgRR: '1:0',
+        bestTrade: 0,
+        worstTrade: 0
+      };
     }
     const totalPL = this.trades.reduce((sum, t) => sum + (t.netPL || 0), 0);
     const wins = this.trades.filter(t => t.netPL > 0).length;
@@ -489,10 +545,17 @@ class TradingJournalApp {
     const bestTrade = Math.max(0, ...this.trades.map(t => t.netPL));
     const worstTrade = Math.min(0, ...this.trades.map(t => t.netPL));
     const validRRTrades = this.trades.filter(t => t.riskRewardRatio > 0);
-    const avgRRNum = validRRTrades.length > 0
-      ? (validRRTrades.reduce((sum, t) => sum + t.riskRewardRatio, 0) / validRRTrades.length).toFixed(2)
-      : '0.00';
-    return { totalPL, winRate, totalTrades: this.trades.length, avgRR: '1:' + avgRRNum, bestTrade, worstTrade };
+    const avgRRNum = validRRTrades.length > 0 ?
+      (validRRTrades.reduce((sum, t) => sum + t.riskRewardRatio, 0) / validRRTrades.length).toFixed(2) :
+      '0.00';
+    return {
+      totalPL,
+      winRate,
+      totalTrades: this.trades.length,
+      avgRR: '1:' + avgRRNum,
+      bestTrade,
+      worstTrade
+    };
   }
 
   renderDashboard() {
@@ -522,38 +585,49 @@ class TradingJournalApp {
     this.renderDashboardAIFeedback();
     this.buildDashboardCalendar();
   }
-  
+
   loadTickerWidget() {
-      if (this.tickerWidgetLoaded && document.getElementById('tradingview-ticker-widget-script')) return;
+    if (this.tickerWidgetLoaded && document.getElementById('tradingview-ticker-widget-script')) return;
 
-      const theme = document.documentElement.getAttribute('data-color-scheme') === 'light' ? 'light' : 'dark';
-      const script = document.createElement('script');
-      script.id = 'tradingview-ticker-widget-script';
-      script.type = 'text/javascript';
-      script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js';
-      script.async = true;
-      script.innerHTML = JSON.stringify({
-          "symbols": [
-              { "description": "SENSEX", "proName": "BSE:SENSEX" },
-              { "description": "NIFTY 50", "proName": "NSE:NIFTY" },
-              { "description": "S&P 500", "proName": "FOREXCOM:SPXUSD" },
-              { "description": "NASDAQ 100", "proName": "FOREXCOM:NSXUSD" },
-              { "description": "BTC/USD", "proName": "BITSTAMP:BTCUSD" },
-              { "description": "ETH/USD", "proName": "BITSTAMP:ETHUSD" }
-          ],
-          "showSymbolLogo": true,
-          "colorTheme": theme,
-          "isTransparent": true,
-          "displayMode": "adaptive",
-          "locale": "in"
-      });
+    const theme = document.documentElement.getAttribute('data-color-scheme') === 'light' ? 'light' : 'dark';
+    const script = document.createElement('script');
+    script.id = 'tradingview-ticker-widget-script';
+    script.type = 'text/javascript';
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js';
+    script.async = true;
+    script.innerHTML = JSON.stringify({
+      "symbols": [{
+        "description": "SENSEX",
+        "proName": "BSE:SENSEX"
+      }, {
+        "description": "NIFTY 50",
+        "proName": "NSE:NIFTY"
+      }, {
+        "description": "S&P 500",
+        "proName": "FOREXCOM:SPXUSD"
+      }, {
+        "description": "NASDAQ 100",
+        "proName": "FOREXCOM:NSXUSD"
+      }, {
+        "description": "BTC/USD",
+        "proName": "BITSTAMP:BTCUSD"
+      }, {
+        "description": "ETH/USD",
+        "proName": "BITSTAMP:ETHUSD"
+      }],
+      "showSymbolLogo": true,
+      "colorTheme": theme,
+      "isTransparent": true,
+      "displayMode": "adaptive",
+      "locale": "in"
+    });
 
-      const container = document.getElementById('newsTickerContainer');
-      if (container) {
-          container.innerHTML = '';
-          container.appendChild(script);
-          this.tickerWidgetLoaded = true;
-      }
+    const container = document.getElementById('newsTickerContainer');
+    if (container) {
+      container.innerHTML = '';
+      container.appendChild(script);
+      this.tickerWidgetLoaded = true;
+    }
   }
 
 
@@ -571,7 +645,11 @@ class TradingJournalApp {
         level: level,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
-      this.allConfidence.unshift({ id: docRef.id, date: today, level });
+      this.allConfidence.unshift({
+        id: docRef.id,
+        date: today,
+        level
+      });
       document.getElementById('confidenceMessage').innerHTML = "<div class='message success'>Daily confidence recorded successfully!</div>";
       this.showToast('Daily confidence recorded!', 'success');
       document.dispatchEvent(new CustomEvent('data-changed'));
@@ -581,38 +659,42 @@ class TradingJournalApp {
   }
 
   /* ----------------------- NOTES SECTION ------------------------------ */
-  
+
   async saveNote() {
     const content = document.getElementById('dailyNoteContent').value.trim();
     if (!content) {
-        this.showToast("Note content cannot be empty.", 'warning');
-        return;
+      this.showToast("Note content cannot be empty.", 'warning');
+      return;
     }
     const today = new Date().toISOString().split('T')[0];
     const existingNote = this.allNotes.find(note => note.date === today);
 
     try {
-        if (existingNote) {
-            await this.db.collection('users').doc(this.currentUser.uid).collection('notes').doc(existingNote.id).update({
-                content: content,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            const noteIndex = this.allNotes.findIndex(n => n.id === existingNote.id);
-            this.allNotes[noteIndex].content = content;
-            this.showToast('Note for today updated!', 'success');
-        } else {
-            const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('notes').add({
-                date: today,
-                content: content,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            this.allNotes.unshift({ id: docRef.id, date: today, content: content });
-            this.showToast('Note saved successfully!', 'success');
-        }
-        document.dispatchEvent(new CustomEvent('data-changed'));
+      if (existingNote) {
+        await this.db.collection('users').doc(this.currentUser.uid).collection('notes').doc(existingNote.id).update({
+          content: content,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        const noteIndex = this.allNotes.findIndex(n => n.id === existingNote.id);
+        this.allNotes[noteIndex].content = content;
+        this.showToast('Note for today updated!', 'success');
+      } else {
+        const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('notes').add({
+          date: today,
+          content: content,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        this.allNotes.unshift({
+          id: docRef.id,
+          date: today,
+          content: content
+        });
+        this.showToast('Note saved successfully!', 'success');
+      }
+      document.dispatchEvent(new CustomEvent('data-changed'));
     } catch (error) {
-        this.showToast(`Error saving note: ${error.message}`, 'error');
-        console.error("[DATA] Error saving note:", error);
+      this.showToast(`Error saving note: ${error.message}`, 'error');
+      console.error("[DATA] Error saving note:", error);
     }
   }
 
@@ -620,18 +702,18 @@ class TradingJournalApp {
     const today = new Date().toISOString().split('T')[0];
     const todayNote = this.allNotes.find(note => note.date === today);
     const noteContentEl = document.getElementById('dailyNoteContent');
-    
+
     noteContentEl.value = todayNote ? todayNote.content : '';
 
     const historyContainer = document.getElementById('notesHistoryContainer');
     if (this.allNotes.length === 0) {
-        historyContainer.innerHTML = '<div class="empty-state">You have not written any notes yet.</div>';
-        return;
+      historyContainer.innerHTML = '<div class="empty-state">You have not written any notes yet.</div>';
+      return;
     }
 
     historyContainer.innerHTML = this.allNotes.map(note => {
-        const notePreview = note.content.substring(0, 100) + (note.content.length > 100 ? '...' : '');
-        return `
+      const notePreview = note.content.substring(0, 100) + (note.content.length > 100 ? '...' : '');
+      return `
         <div class="note-item clickable" onclick="app.showNoteDetails('${note.id}')">
             <div class="note-header">
                 <h4 class="note-date">${new Date(note.date).toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h4>
@@ -640,7 +722,8 @@ class TradingJournalApp {
                 <p>${notePreview.replace(/\n/g, '<br>')}</p>
             </div>
         </div>
-    `}).join('');
+    `
+    }).join('');
   }
 
   showNoteDetails(noteId) {
@@ -659,8 +742,8 @@ class TradingJournalApp {
   }
 
   hideNoteModal() {
-      document.getElementById('noteModal').classList.add('hidden');
-      this.currentEditingNoteId = null;
+    document.getElementById('noteModal').classList.add('hidden');
+    this.currentEditingNoteId = null;
   }
 
   async saveNoteChanges() {
@@ -668,48 +751,48 @@ class TradingJournalApp {
 
     const newContent = document.getElementById('editNoteContent').value.trim();
     if (!newContent) {
-        this.showToast('Note content cannot be empty.', 'warning');
-        return;
+      this.showToast('Note content cannot be empty.', 'warning');
+      return;
     }
 
     try {
-        await this.db.collection('users').doc(this.currentUser.uid).collection('notes').doc(this.currentEditingNoteId).update({
-            content: newContent,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+      await this.db.collection('users').doc(this.currentUser.uid).collection('notes').doc(this.currentEditingNoteId).update({
+        content: newContent,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
 
-        const noteIndex = this.allNotes.findIndex(n => n.id === this.currentEditingNoteId);
-        if (noteIndex > -1) {
-            this.allNotes[noteIndex].content = newContent;
-        }
+      const noteIndex = this.allNotes.findIndex(n => n.id === this.currentEditingNoteId);
+      if (noteIndex > -1) {
+        this.allNotes[noteIndex].content = newContent;
+      }
 
-        this.showToast('Note updated successfully!', 'success');
-        this.hideNoteModal();
-        document.dispatchEvent(new CustomEvent('data-changed'));
+      this.showToast('Note updated successfully!', 'success');
+      this.hideNoteModal();
+      document.dispatchEvent(new CustomEvent('data-changed'));
     } catch (error) {
-        this.showToast(`Error updating note: ${error.message}`, 'error');
-        console.error("[DATA] Error updating note:", error);
+      this.showToast(`Error updating note: ${error.message}`, 'error');
+      console.error("[DATA] Error updating note:", error);
     }
   }
-  
+
   /* ----------------------- RULEBOOK SECTION ------------------------------ */
   showRulebookModal() {
-      document.getElementById('rulebookModal').classList.remove('hidden');
-      this.resetRulebookForm();
-      this.renderRulebook();
+    document.getElementById('rulebookModal').classList.remove('hidden');
+    this.resetRulebookForm();
+    this.renderRulebook();
   }
 
   hideRulebookModal() {
-      document.getElementById('rulebookModal').classList.add('hidden');
+    document.getElementById('rulebookModal').classList.add('hidden');
   }
 
   renderRulebook() {
-      const container = document.getElementById('ruleListContainer');
-      if (this.allRules.length === 0) {
-          container.innerHTML = '<div class="empty-state">You have not added any rules yet.</div>';
-          return;
-      }
-      container.innerHTML = this.allRules.map(rule => `
+    const container = document.getElementById('ruleListContainer');
+    if (this.allRules.length === 0) {
+      container.innerHTML = '<div class="empty-state">You have not added any rules yet.</div>';
+      return;
+    }
+    container.innerHTML = this.allRules.map(rule => `
           <div class="rule-item">
               <div class="rule-content">
                   <h4 class="rule-title">${rule.title}</h4>
@@ -724,73 +807,78 @@ class TradingJournalApp {
   }
 
   async saveRule() {
-      const form = document.getElementById('rulebookForm');
-      const ruleId = form.ruleId.value;
-      const title = form.ruleTitle.value.trim();
-      const description = form.ruleDescription.value.trim();
+    const form = document.getElementById('rulebookForm');
+    const ruleId = form.ruleId.value;
+    const title = form.ruleTitle.value.trim();
+    const description = form.ruleDescription.value.trim();
 
-      if (!title) {
-          this.showToast('Rule title cannot be empty.', 'warning');
-          return;
+    if (!title) {
+      this.showToast('Rule title cannot be empty.', 'warning');
+      return;
+    }
+
+    const ruleData = {
+      title,
+      description,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    try {
+      if (ruleId) {
+        await this.db.collection('users').doc(this.currentUser.uid).collection('rules').doc(ruleId).update(ruleData);
+        const index = this.allRules.findIndex(r => r.id === ruleId);
+        this.allRules[index] = { ...this.allRules[index],
+          ...ruleData
+        };
+        this.showToast('Rule updated successfully!', 'success');
+      } else {
+        ruleData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+        const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('rules').add(ruleData);
+        this.allRules.unshift({
+          id: docRef.id,
+          ...ruleData
+        });
+        this.showToast('Rule added successfully!', 'success');
       }
-
-      const ruleData = {
-          title,
-          description,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      };
-
-      try {
-          if (ruleId) {
-              await this.db.collection('users').doc(this.currentUser.uid).collection('rules').doc(ruleId).update(ruleData);
-              const index = this.allRules.findIndex(r => r.id === ruleId);
-              this.allRules[index] = { ...this.allRules[index], ...ruleData };
-              this.showToast('Rule updated successfully!', 'success');
-          } else { 
-              ruleData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-              const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('rules').add(ruleData);
-              this.allRules.unshift({ id: docRef.id, ...ruleData });
-              this.showToast('Rule added successfully!', 'success');
-          }
-          this.resetRulebookForm();
-          this.renderRulebook();
-          document.dispatchEvent(new CustomEvent('data-changed'));
-      } catch (error) {
-          this.showToast(`Error saving rule: ${error.message}`, 'error');
-          console.error("[DATA] Error saving rule:", error);
-      }
+      this.resetRulebookForm();
+      this.renderRulebook();
+      document.dispatchEvent(new CustomEvent('data-changed'));
+    } catch (error) {
+      this.showToast(`Error saving rule: ${error.message}`, 'error');
+      console.error("[DATA] Error saving rule:", error);
+    }
   }
 
   editRule(ruleId) {
-      const rule = this.allRules.find(r => r.id === ruleId);
-      if (!rule) return;
-      
-      const form = document.getElementById('rulebookForm');
-      form.ruleId.value = rule.id;
-      form.ruleTitle.value = rule.title;
-      form.ruleDescription.value = rule.description;
-      
-      document.getElementById('cancelEditRuleBtn').classList.remove('hidden');
+    const rule = this.allRules.find(r => r.id === ruleId);
+    if (!rule) return;
+
+    const form = document.getElementById('rulebookForm');
+    form.ruleId.value = rule.id;
+    form.ruleTitle.value = rule.title;
+    form.ruleDescription.value = rule.description;
+
+    document.getElementById('cancelEditRuleBtn').classList.remove('hidden');
   }
 
   async deleteRule(ruleId) {
-      try {
-          await this.db.collection('users').doc(this.currentUser.uid).collection('rules').doc(ruleId).delete();
-          this.allRules = this.allRules.filter(r => r.id !== ruleId);
-          this.renderRulebook();
-          this.showToast('Rule deleted.', 'info');
-          document.dispatchEvent(new CustomEvent('data-changed'));
-      } catch (error) {
-          this.showToast(`Error deleting rule: ${error.message}`, 'error');
-          console.error("[DATA] Error deleting rule:", error);
-      }
+    try {
+      await this.db.collection('users').doc(this.currentUser.uid).collection('rules').doc(ruleId).delete();
+      this.allRules = this.allRules.filter(r => r.id !== ruleId);
+      this.renderRulebook();
+      this.showToast('Rule deleted.', 'info');
+      document.dispatchEvent(new CustomEvent('data-changed'));
+    } catch (error) {
+      this.showToast(`Error deleting rule: ${error.message}`, 'error');
+      console.error("[DATA] Error deleting rule:", error);
+    }
   }
 
   resetRulebookForm() {
-      const form = document.getElementById('rulebookForm');
-      form.reset();
-      form.ruleId.value = '';
-      document.getElementById('cancelEditRuleBtn').classList.add('hidden');
+    const form = document.getElementById('rulebookForm');
+    form.reset();
+    form.ruleId.value = '';
+    document.getElementById('cancelEditRuleBtn').classList.add('hidden');
   }
 
   /* ----------------------- ADD TRADE FORM ------------------------------ */
@@ -802,17 +890,17 @@ class TradingJournalApp {
     if (exitDateEl) exitDateEl.value = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 16);
     this.renderRulebookChecklist();
   }
-  
+
   renderRulebookChecklist() {
-      const container = document.getElementById('rulebookChecklist');
-      if (!container) return;
+    const container = document.getElementById('rulebookChecklist');
+    if (!container) return;
 
-      if (this.allRules.length === 0) {
-          container.innerHTML = '<p class="empty-state-sm">No rules defined. Go to "My Rulebook" to add some.</p>';
-          return;
-      }
+    if (this.allRules.length === 0) {
+      container.innerHTML = '<p class="empty-state-sm">No rules defined. Go to "My Rulebook" to add some.</p>';
+      return;
+    }
 
-      container.innerHTML = this.allRules.map(rule => `
+    container.innerHTML = this.allRules.map(rule => `
           <label title="${rule.description}">
               <input type="checkbox" name="followedRules" value="${rule.title}"> ${rule.title}
           </label>
@@ -846,13 +934,13 @@ class TradingJournalApp {
     const strategySelect = document.getElementById('addTradeStrategySelect');
     const otherStrategyGroup = document.getElementById('otherStrategyGroup');
     if (strategySelect && otherStrategyGroup) {
-        strategySelect.addEventListener('change', function() {
-            if (this.value === 'Other') {
-                otherStrategyGroup.classList.remove('hidden');
-            } else {
-                otherStrategyGroup.classList.add('hidden');
-            }
-        });
+      strategySelect.addEventListener('change', function() {
+        if (this.value === 'Other') {
+          otherStrategyGroup.classList.remove('hidden');
+        } else {
+          otherStrategyGroup.classList.add('hidden');
+        }
+      });
     }
   }
 
@@ -897,8 +985,8 @@ class TradingJournalApp {
 
     let finalStrategy = fd.get('strategy');
     if (finalStrategy === 'Other') {
-        const customStrategy = fd.get('other_strategy').trim();
-        finalStrategy = customStrategy || 'Other (unspecified)';
+      const customStrategy = fd.get('other_strategy').trim();
+      finalStrategy = customStrategy || 'Other (unspecified)';
     }
 
     const trade = {
@@ -955,7 +1043,10 @@ class TradingJournalApp {
     }
     try {
       const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('trades').add(trade);
-      this.allTrades.unshift({ id: docRef.id, ...trade });
+      this.allTrades.unshift({
+        id: docRef.id,
+        ...trade
+      });
       this.showToast('Trade saved successfully!', 'success');
       form.reset();
       this.updateCalculations();
@@ -979,7 +1070,7 @@ class TradingJournalApp {
     const symbols = [...new Set(this.trades.map(t => t.symbol))];
     const symbolFilter = document.getElementById('symbolFilter');
     symbolFilter.innerHTML = '<option value="">All Symbols</option>' + symbols.map(s => `<option value="${s}">${s}</option>`).join('');
-    
+
     const strategies = [...new Set(this.trades.map(t => t.strategy))];
 
     const strategyFilter = document.getElementById('strategyFilter');
@@ -1021,10 +1112,10 @@ class TradingJournalApp {
     const t = this.trades.find(tr => tr.id === id);
     if (!t) return;
     const rrText = t.riskRewardRatio ? t.riskRewardRatio.toFixed(2) : '0.00';
-    
+
     let followedRulesHtml = '';
     if (t.followedRules && t.followedRules.length > 0) {
-        followedRulesHtml = `
+      followedRulesHtml = `
             <div style="margin-top:16px;">
                 <strong>Followed Rules:</strong>
                 <ul style="padding-left: 20px; margin-top: 8px;">
@@ -1055,7 +1146,9 @@ class TradingJournalApp {
     document.getElementById('tradeModal').classList.remove('hidden');
   }
 
-  hideTradeModal() { document.getElementById('tradeModal').classList.add('hidden'); }
+  hideTradeModal() {
+    document.getElementById('tradeModal').classList.add('hidden');
+  }
   /* ---------------------- NEW DASHBOARD HELPERS ----------------------------- */
   drawDashboardPLChart() {
     const ctx = document.getElementById('dashboardPlChart');
@@ -1105,7 +1198,9 @@ class TradingJournalApp {
           y: {
             beginAtZero: false,
             ticks: {
-              font: { size: 10 },
+              font: {
+                size: 10
+              },
               callback: (value) => this.formatCurrency(value).replace('.00', '')
             }
           },
@@ -1151,16 +1246,44 @@ class TradingJournalApp {
     const ctx = document.getElementById('plChart');
     if (!ctx) return;
     this.charts.pl?.destroy();
-    if (this.trades.length < 2) { ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height); return; }
+    if (this.trades.length < 2) {
+      ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height);
+      return;
+    }
     const sorted = [...this.trades].sort((a, b) => new Date(a.entryDate) - new Date(b.entryDate));
     const labels = [];
     const cum = [];
     let run = 0;
-    sorted.forEach(t => { run += t.netPL; labels.push(this.formatDate(t.entryDate)); cum.push(run); });
+    sorted.forEach(t => {
+      run += t.netPL;
+      labels.push(this.formatDate(t.entryDate));
+      cum.push(run);
+    });
     this.charts.pl = new Chart(ctx, {
       type: 'line',
-      data: { labels, datasets: [{ label: 'Cumulative P&L', data: cum, borderColor: '#1FB8CD', backgroundColor: 'rgba(31,184,205,0.15)', tension: 0.4, fill: true }] },
-      options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: false, ticks: { callback: v => this.formatCurrency(v) } } } }
+      data: {
+        labels,
+        datasets: [{
+          label: 'Cumulative P&L',
+          data: cum,
+          borderColor: '#1FB8CD',
+          backgroundColor: 'rgba(31,184,205,0.15)',
+          tension: 0.4,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: false,
+            ticks: {
+              callback: v => this.formatCurrency(v)
+            }
+          }
+        }
+      }
     });
   }
 
@@ -1168,16 +1291,50 @@ class TradingJournalApp {
     const ctx = document.getElementById('rrChart');
     if (!ctx) return;
     this.charts.rr?.destroy();
-    if (this.trades.length === 0) { ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height); return; }
-    const buckets = { '<1:1': 0, '1:1-1:2': 0, '1:2-1:3': 0, '>1:3': 0 };
+    if (this.trades.length === 0) {
+      ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height);
+      return;
+    }
+    const buckets = {
+      '<1:1': 0,
+      '1:1-1:2': 0,
+      '1:2-1:3': 0,
+      '>1:3': 0
+    };
     this.trades.forEach(t => {
       const rr = t.riskRewardRatio || 0;
-      if (rr < 1) buckets['<1:1']++; else if (rr < 2) buckets['1:1-1:2']++; else if (rr < 3) buckets['1:2-1:3']++; else buckets['>1:3']++;
+      if (rr < 1) buckets['<1:1']++;
+      else if (rr < 2) buckets['1:1-1:2']++;
+      else if (rr < 3) buckets['1:2-1:3']++;
+      else buckets['>1:3']++;
     });
     this.charts.rr = new Chart(ctx, {
       type: 'bar',
-      data: { labels: Object.keys(buckets), datasets: [{ label: '# of Trades', data: Object.values(buckets), backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'] }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+      data: {
+        labels: Object.keys(buckets),
+        datasets: [{
+          label: '# of Trades',
+          data: Object.values(buckets),
+          backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0']
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: false
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              stepSize: 1
+            }
+          }
+        }
+      }
     });
   }
 
@@ -1185,10 +1342,16 @@ class TradingJournalApp {
     const ctx = document.getElementById('strategyChart');
     if (!ctx) return;
     this.charts.strategy?.destroy();
-    if (this.trades.length === 0) { ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height); return; }
+    if (this.trades.length === 0) {
+      ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height);
+      return;
+    }
     const map = {};
     this.trades.forEach(t => {
-      if (!map[t.strategy]) map[t.strategy] = { total: 0, wins: 0 };
+      if (!map[t.strategy]) map[t.strategy] = {
+        total: 0,
+        wins: 0
+      };
       map[t.strategy].total++;
       if (t.netPL > 0) map[t.strategy].wins++;
     });
@@ -1196,8 +1359,32 @@ class TradingJournalApp {
     const data = labels.map(l => Math.round((map[l].wins / map[l].total) * 100));
     this.charts.strategy = new Chart(ctx, {
       type: 'bar',
-      data: { labels, datasets: [{ label: 'Win Rate %', data, backgroundColor: '#4BC0C0' }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } } }
+      data: {
+        labels,
+        datasets: [{
+          label: 'Win Rate %',
+          data,
+          backgroundColor: '#4BC0C0'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: false
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100,
+            ticks: {
+              callback: v => v + '%'
+            }
+          }
+        }
+      }
     });
   }
 
@@ -1206,7 +1393,11 @@ class TradingJournalApp {
     container.querySelectorAll('.time-table').forEach(n => n.remove());
     if (this.trades.length === 0) return;
     const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const dowMap = Object.fromEntries(dowNames.map(d => [d, { total: 0, wins: 0, net: 0 }]));
+    const dowMap = Object.fromEntries(dowNames.map(d => [d, {
+      total: 0,
+      wins: 0,
+      net: 0
+    }]));
     this.trades.forEach(t => {
       const d = new Date(t.entryDate);
       const dow = dowNames[d.getDay()];
@@ -1230,39 +1421,39 @@ class TradingJournalApp {
 
   /* ----------------------- CHARTS SECTION ----------------------------- */
   renderCharts() {
-      if (this.chartsWidgetLoaded || typeof TradingView === 'undefined') return;
-  
-      const widgetContainer = document.getElementById('tradingview_chart_widget');
-      if (!widgetContainer) return;
-  
-      widgetContainer.innerHTML = '';
-  
-      const theme = document.documentElement.getAttribute('data-color-scheme') === 'light' ? 'light' : 'dark';
-  
-      new TradingView.widget({
-          "autosize": true,
-          "symbol": "NSE:NIFTY",
-          "interval": "D",
-          "timezone": "Asia/Kolkata",
-          "theme": theme,
-          "style": "1",
-          "locale": "in",
-          "enable_publishing": false,
-          "allow_symbol_change": true,
-          "details": true,
-          "hotlist": true,
-          "calendar": true,
-          "watchlist": [
-            "NSE:NIFTY",
-            "NSE:BANKNIFTY",
-            "NSE:RELIANCE",
-            "NSE:HDFCBANK",
-            "FX:EURUSD",
-            "BITSTAMP:BTCUSD"
-          ],
-          "container_id": "tradingview_chart_widget"
-      });
-      this.chartsWidgetLoaded = true;
+    if (this.chartsWidgetLoaded || typeof TradingView === 'undefined') return;
+
+    const widgetContainer = document.getElementById('tradingview_chart_widget');
+    if (!widgetContainer) return;
+
+    widgetContainer.innerHTML = '';
+
+    const theme = document.documentElement.getAttribute('data-color-scheme') === 'light' ? 'light' : 'dark';
+
+    new TradingView.widget({
+      "autosize": true,
+      "symbol": "NSE:NIFTY",
+      "interval": "D",
+      "timezone": "Asia/Kolkata",
+      "theme": theme,
+      "style": "1",
+      "locale": "in",
+      "enable_publishing": false,
+      "allow_symbol_change": true,
+      "details": true,
+      "hotlist": true,
+      "calendar": true,
+      "watchlist": [
+        "NSE:NIFTY",
+        "NSE:BANKNIFTY",
+        "NSE:RELIANCE",
+        "NSE:HDFCBANK",
+        "FX:EURUSD",
+        "BITSTAMP:BTCUSD"
+      ],
+      "container_id": "tradingview_chart_widget"
+    });
+    this.chartsWidgetLoaded = true;
   }
 
 
@@ -1299,7 +1490,36 @@ class TradingJournalApp {
     const avg = (this.confidenceEntries.reduce((sum, c) => sum + c.level, 0) / this.confidenceEntries.length).toFixed(1);
     document.getElementById('confidenceAnalysis').innerHTML = `<div class="suggestion-item suggestion-info"><div class="suggestion-title">Avg Confidence</div><div class="suggestion-desc">${avg}/10 over ${this.confidenceEntries.length} days</div></div>`;
     const sorted = [...this.confidenceEntries].sort((a, b) => new Date(a.date) - new Date(b.date));
-    this.charts.conf = new Chart(ctx, { type: 'line', data: { labels: sorted.map(c => this.formatDate(c.date)), datasets: [{ label: 'Confidence', data: sorted.map(c => c.level), borderColor: '#1FB8CD', tension: 0.3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { min: 1, max: 10, ticks: { stepSize: 1 } } } } });
+    this.charts.conf = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: sorted.map(c => this.formatDate(c.date)),
+        datasets: [{
+          label: 'Confidence',
+          data: sorted.map(c => c.level),
+          borderColor: '#1FB8CD',
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: false
+          }
+        },
+        scales: {
+          y: {
+            min: 1,
+            max: 10,
+            ticks: {
+              stepSize: 1
+            }
+          }
+        }
+      }
+    });
   }
 
   bestStrategy() {
@@ -1327,18 +1547,21 @@ class TradingJournalApp {
   changeCalendarMonth(offset) {
     this.currentCalendarDate.setMonth(this.currentCalendarDate.getMonth() + offset);
     if (document.getElementById('dashboard').classList.contains('active')) {
-        this.buildDashboardCalendar();
+      this.buildDashboardCalendar();
     }
     if (document.getElementById('reports').classList.contains('active')) {
-        this.buildCalendar();
+      this.buildCalendar();
     }
   }
-  
+
   buildCalendar() {
     const date = this.currentCalendarDate;
     const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
     const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-    document.getElementById('currentMonth').textContent = monthStart.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    document.getElementById('currentMonth').textContent = monthStart.toLocaleDateString('en-IN', {
+      month: 'long',
+      year: 'numeric'
+    });
     const cal = document.getElementById('plCalendar');
     cal.innerHTML = '';
     ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(d => {
@@ -1376,7 +1599,12 @@ class TradingJournalApp {
 
   showCalendarTooltip(event, trades, dateKey) {
     const tooltip = document.getElementById('calendarTooltip');
-    const formattedDate = new Date(dateKey).toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const formattedDate = new Date(dateKey).toLocaleDateString('en-IN', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
     let content = `<h4>Trades for ${formattedDate}</h4>`;
     trades.forEach(trade => {
       content += `
@@ -1462,54 +1690,73 @@ class TradingJournalApp {
     const preEmotions = {};
     this.trades.forEach(t => {
       if (!t.preEmotion) return;
-      if (!preEmotions[t.preEmotion]) preEmotions[t.preEmotion] = { total: 0, pl: 0 };
+      if (!preEmotions[t.preEmotion]) preEmotions[t.preEmotion] = {
+        total: 0,
+        pl: 0
+      };
       preEmotions[t.preEmotion].total++;
       preEmotions[t.preEmotion].pl += t.netPL;
     });
     if (Object.keys(preEmotions).length === 0) return '<div class="empty-state">No emotional data recorded.</div>';
-    let mostProfitable = { emotion: 'N/A', avg: -Infinity };
-    let leastProfitable = { emotion: 'N/A', avg: Infinity };
+    let mostProfitable = {
+      emotion: 'N/A',
+      avg: -Infinity
+    };
+    let leastProfitable = {
+      emotion: 'N/A',
+      avg: Infinity
+    };
     for (const emotion in preEmotions) {
       const avg = preEmotions[emotion].pl / preEmotions[emotion].total;
-      if (avg > mostProfitable.avg) mostProfitable = { emotion, avg };
-      if (avg < leastProfitable.avg) leastProfitable = { emotion, avg };
+      if (avg > mostProfitable.avg) mostProfitable = {
+        emotion,
+        avg
+      };
+      if (avg < leastProfitable.avg) leastProfitable = {
+        emotion,
+        avg
+      };
     }
     return `
       <div class="report-item"><span>Most Profitable Emotion:</span><span>${mostProfitable.emotion} (${this.formatCurrency(mostProfitable.avg)}/trade)</span></div>
       <div class="report-item"><span>Least Profitable Emotion:</span><span>${leastProfitable.emotion} (${this.formatCurrency(leastProfitable.avg)}/trade)</span></div>
     `;
   }
-  
+
   generateRulebookReport() {
-      if (this.allRules.length === 0) {
-          return '<div class="empty-state">No rules defined in your rulebook.</div>';
-      }
-      if (this.allTrades.length === 0) {
-          return '<div class="empty-state">No trades recorded to analyze rule adherence.</div>';
-      }
+    if (this.allRules.length === 0) {
+      return '<div class="empty-state">No rules defined in your rulebook.</div>';
+    }
+    if (this.allTrades.length === 0) {
+      return '<div class="empty-state">No trades recorded to analyze rule adherence.</div>';
+    }
 
-      const ruleStats = {};
-      this.allRules.forEach(rule => {
-          ruleStats[rule.title] = { followed: 0 };
-      });
+    const ruleStats = {};
+    this.allRules.forEach(rule => {
+      ruleStats[rule.title] = {
+        followed: 0
+      };
+    });
 
-      this.allTrades.forEach(trade => {
-          if (trade.followedRules && Array.isArray(trade.followedRules)) {
-              trade.followedRules.forEach(ruleTitle => {
-                  if (ruleStats[ruleTitle]) {
-                      ruleStats[ruleTitle].followed++;
-                  }
-              });
+    this.allTrades.forEach(trade => {
+      if (trade.followedRules && Array.isArray(trade.followedRules)) {
+        trade.followedRules.forEach(ruleTitle => {
+          if (ruleStats[ruleTitle]) {
+            ruleStats[ruleTitle].followed++;
           }
-      });
+        });
+      }
+    });
 
-      let table = '<table class="report-table"><thead><tr><th>Rule</th><th>Followed</th><th>Adherence</th></tr></thead><tbody>';
-      const totalTrades = this.allTrades.length;
-      
-      for (const title in ruleStats) {
-          const { followed } = ruleStats[title];
-          const adherence = totalTrades > 0 ? Math.round((followed / totalTrades) * 100) : 0;
-          table += `
+    let table = '<table class="report-table"><thead><tr><th>Rule</th><th>Followed</th><th>Adherence</th></tr></thead><tbody>';
+    const totalTrades = this.allTrades.length;
+
+    for (const title in ruleStats) {
+      const {
+        followed
+      } = ruleStats[title];
+      const adherence = totalTrades > 0 ? Math.round((followed / totalTrades) * 100) : 0;
+      table += `
               <tr>
                   <td>${title}</td>
                   <td>${followed} / ${totalTrades}</td>
@@ -1520,9 +1767,9 @@ class TradingJournalApp {
                   </td>
               </tr>
           `;
-      }
-      table += '</tbody></table>';
-      return table;
+    }
+    table += '</tbody></table>';
+    return table;
   }
 
   generateAIFeedback() {
@@ -1619,16 +1866,28 @@ class TradingJournalApp {
 
   calculateStatsForTrades(trades) {
     if (trades.length === 0) {
-      return { totalPL: 0, winRate: 0, totalTrades: 0, bestTrade: 0, worstTrade: 0 };
+      return {
+        totalPL: 0,
+        winRate: 0,
+        totalTrades: 0,
+        bestTrade: 0,
+        worstTrade: 0
+      };
     }
     const totalPL = trades.reduce((sum, t) => sum + (t.netPL || 0), 0);
     const wins = trades.filter(t => t.netPL > 0).length;
     const winRate = trades.length > 0 ? Math.round((wins / trades.length) * 100) : 0;
     const bestTrade = Math.max(0, ...trades.map(t => t.netPL));
     const worstTrade = Math.min(0, ...trades.map(t => t.netPL));
-    return { totalPL, winRate, totalTrades: trades.length, bestTrade, worstTrade };
+    return {
+      totalPL,
+      winRate,
+      totalTrades: trades.length,
+      bestTrade,
+      worstTrade
+    };
   }
-  
+
   // --- START: AI CHAT METHODS ---
   async handleSendMessage() {
     const chatInput = document.getElementById('aiChatInput');
@@ -1645,8 +1904,14 @@ class TradingJournalApp {
     try {
       const response = await fetch('/.netlify/functions/ask-ai', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, trades, psychology })
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          question,
+          trades,
+          psychology
+        })
       });
 
       if (!response.ok) throw new Error(`Server error: ${response.status}`);
@@ -1709,102 +1974,111 @@ class TradingJournalApp {
     const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
     const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
 
-    document.getElementById('dashCurrentMonth').textContent = monthStart.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+    document.getElementById('dashCurrentMonth').textContent = monthStart.toLocaleDateString('en-IN', {
+      month: 'short',
+      year: 'numeric'
+    });
     const cal = document.getElementById('dashPlCalendar');
     if (!cal) return;
     cal.innerHTML = '';
 
     ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach(d => {
-        const headerEl = document.createElement('div');
-        headerEl.className = 'calendar-day header';
-        headerEl.textContent = d;
-        cal.appendChild(headerEl);
+      const headerEl = document.createElement('div');
+      headerEl.className = 'calendar-day header';
+      headerEl.textContent = d;
+      cal.appendChild(headerEl);
     });
 
     for (let i = 0; i < monthStart.getDay(); i++) {
-        const spacerEl = document.createElement('div');
-        spacerEl.className = 'calendar-day no-trades';
-        cal.appendChild(spacerEl);
+      const spacerEl = document.createElement('div');
+      spacerEl.className = 'calendar-day no-trades';
+      cal.appendChild(spacerEl);
     }
 
     for (let d = 1; d <= monthEnd.getDate(); d++) {
-        const dayEl = document.createElement('div');
-        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-        const tradesOnDay = this.trades.filter(t => t.entryDate && t.entryDate.startsWith(key));
-        
-        let cls = 'no-trades';
-        if (tradesOnDay.length > 0) {
-            const pl = tradesOnDay.reduce((sum, t) => sum + t.netPL, 0);
-            if (pl > 1000) cls = 'profit-high';
-            else if (pl > 0) cls = 'profit-low';
-            else if (pl < -1000) cls = 'loss-high';
-            else if (pl < 0) cls = 'loss-low';
-            else cls = 'profit-low';
+      const dayEl = document.createElement('div');
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const tradesOnDay = this.trades.filter(t => t.entryDate && t.entryDate.startsWith(key));
 
-            dayEl.addEventListener('mouseenter', (e) => this.showCalendarTooltip(e, tradesOnDay, key));
-            dayEl.addEventListener('mousemove', (e) => this.updateTooltipPosition(e));
-            dayEl.addEventListener('mouseleave', () => this.hideCalendarTooltip());
-        }
-        
-        dayEl.className = `calendar-day ${cls}`;
-        dayEl.textContent = d;
-        cal.appendChild(dayEl);
+      let cls = 'no-trades';
+      if (tradesOnDay.length > 0) {
+        const pl = tradesOnDay.reduce((sum, t) => sum + t.netPL, 0);
+        if (pl > 1000) cls = 'profit-high';
+        else if (pl > 0) cls = 'profit-low';
+        else if (pl < -1000) cls = 'loss-high';
+        else if (pl < 0) cls = 'loss-low';
+        else cls = 'profit-low';
+
+        dayEl.addEventListener('mouseenter', (e) => this.showCalendarTooltip(e, tradesOnDay, key));
+        dayEl.addEventListener('mousemove', (e) => this.updateTooltipPosition(e));
+        dayEl.addEventListener('mouseleave', () => this.hideCalendarTooltip());
+      }
+
+      dayEl.className = `calendar-day ${cls}`;
+      dayEl.textContent = d;
+      cal.appendChild(dayEl);
     }
   }
   // --- END: NEW DASHBOARD CALENDAR METHOD ---
-  
+
   // --- START: NEW FORECAST METHODS ---
   async getForecast() {
-      const symbol = document.getElementById('forecastSymbol').value.trim();
-      const timeframe = document.getElementById('forecastTimeframe').value;
-      const steps = document.getElementById('forecastSteps').value;
-      const initialMsg = document.getElementById('forecastInitialMessage');
-      const chartContainer = document.getElementById('forecastChartContainer');
-      const metricsContainer = document.getElementById('forecastMetricsContainer');
-      const forecastTitle = document.getElementById('forecastTitle');
+    const symbol = document.getElementById('forecastSymbol').value.trim();
+    const timeframe = document.getElementById('forecastTimeframe').value;
+    const steps = document.getElementById('forecastSteps').value;
+    const initialMsg = document.getElementById('forecastInitialMessage');
+    const chartContainer = document.getElementById('forecastChartContainer');
+    const metricsContainer = document.getElementById('forecastMetricsContainer');
+    const forecastTitle = document.getElementById('forecastTitle');
 
-      if (!symbol) {
-          this.showToast("Please enter an asset symbol.", "warning");
-          return;
+    if (!symbol) {
+      this.showToast("Please enter an asset symbol.", "warning");
+      return;
+    }
+
+    initialMsg.innerHTML = '<div class="loading">Fetching Yahoo Finance data & generating AI forecast...</div>';
+    initialMsg.style.display = 'block';
+    chartContainer.style.display = 'none';
+    metricsContainer.style.display = 'none';
+
+    try {
+      const response = await fetch('/.netlify/functions/get-yahoofinance-forecast', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          symbol,
+          timeframe,
+          steps
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to generate forecast.');
       }
 
-      initialMsg.innerHTML = '<div class="loading">Fetching Yahoo Finance data & generating AI forecast...</div>';
-      initialMsg.style.display = 'block';
-      chartContainer.style.display = 'none';
-      metricsContainer.style.display = 'none';
+      const data = await response.json();
 
-      try {
-          const response = await fetch('/.netlify/functions/get-yahoofinance-forecast', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ symbol, timeframe, steps })
-          });
+      forecastTitle.textContent = `${(data.displayName || symbol).toUpperCase()} Price Forecast`;
+      initialMsg.style.display = 'none';
+      chartContainer.style.display = 'block';
+      metricsContainer.style.display = 'block';
 
-          if (!response.ok) {
-              const err = await response.json();
-              throw new Error(err.error || 'Failed to generate forecast.');
-          }
+      this.renderForecastChart(data.chartData, parseInt(steps), data.currency);
+      this.renderForecastMetrics(data.metrics, data.currency);
 
-          const data = await response.json();
-          
-          forecastTitle.textContent = `${(data.displayName || symbol).toUpperCase()} Price Forecast`;
-          initialMsg.style.display = 'none';
-          chartContainer.style.display = 'block';
-          metricsContainer.style.display = 'block';
-          
-          this.renderForecastChart(data.chartData, parseInt(steps), data.currency);
-          this.renderForecastMetrics(data.metrics, data.currency);
-
-      } catch (error) {
-          console.error("Error fetching AI forecast:", error);
-          initialMsg.innerHTML = `<div class="message error">Error: ${error.message}</div>`;
-      }
+    } catch (error) {
+      console.error("Error fetching AI forecast:", error);
+      initialMsg.innerHTML = `<div class="message error">Error: ${error.message}</div>`;
+    }
   }
 
   renderForecastChart(data, forecastSteps, currencyCode) {
     const ctx = document.getElementById('forecastChartCanvas').getContext('2d');
     if (this.forecastChart) {
-        this.forecastChart.destroy();
+      this.forecastChart.destroy();
     }
 
     const forecastStartIndex = data.length - forecastSteps;
@@ -1815,105 +2089,134 @@ class TradingJournalApp {
     const alignedForecastData = Array(historicalData.length - 1).fill(null).concat(forecastPoints);
 
     this.forecastChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: data.map(d => d ? d.date : ''),
-            datasets: [{
-                label: 'Historical',
-                data: historicalData.map(d => d ? d.price : null),
-                borderColor: 'rgba(var(--color-secondary-val), 1)',
-                backgroundColor: 'rgba(var(--color-secondary-val), 0.1)',
-                fill: true,
-                tension: 0.3,
-                pointRadius: 0,
-            }, {
-                label: 'Forecast',
-                data: alignedForecastData,
-                borderColor: 'rgba(var(--color-secondary-val), 1)',
-                borderDash: [5, 5],
-                fill: false,
-                tension: 0.3,
-                pointRadius: 0,
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { 
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: (context) => {
-                            let label = context.dataset.label || '';
-                            if (label) {
-                                label += ': ';
-                            }
-                            if (context.parsed.y !== null) {
-                                label += this.formatCurrency(context.parsed.y, currencyCode);
-                            }
-                            return label;
-                        }
-                    }
+      type: 'line',
+      data: {
+        labels: data.map(d => d ? d.date : ''),
+        datasets: [{
+          label: 'Historical',
+          data: historicalData.map(d => d ? d.price : null),
+          borderColor: 'rgba(var(--color-secondary-val), 1)',
+          backgroundColor: 'rgba(var(--color-secondary-val), 0.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 0,
+        }, {
+          label: 'Forecast',
+          data: alignedForecastData,
+          borderColor: 'rgba(var(--color-secondary-val), 1)',
+          borderDash: [5, 5],
+          fill: false,
+          tension: 0.3,
+          pointRadius: 0,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                let label = context.dataset.label || '';
+                if (label) {
+                  label += ': ';
                 }
-            },
-            scales: {
-                x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 7 } },
-                y: { ticks: { callback: (value) => this.formatCurrency(value, currencyCode) } }
-            },
-            interaction: {
-                intersect: false,
-                mode: 'index',
-            },
-        }
+                if (context.parsed.y !== null) {
+                  label += this.formatCurrency(context.parsed.y, currencyCode);
+                }
+                return label;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: {
+              maxRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 7
+            }
+          },
+          y: {
+            ticks: {
+              callback: (value) => this.formatCurrency(value, currencyCode)
+            }
+          }
+        },
+        interaction: {
+          intersect: false,
+          mode: 'index',
+        },
+      }
     });
-}
+  }
 
   renderForecastMetrics(metrics, currencyCode) {
-      const grid = document.getElementById('forecastMetricsGrid');
-      grid.innerHTML = '';
+    const grid = document.getElementById('forecastMetricsGrid');
+    grid.innerHTML = '';
 
-      const metricsData = [
-          { title: 'Trend', value: metrics.trend, arrow: metrics.trend === 'Bullish' ? '↗' : '↘' },
-          { title: 'Avg Percentage Change', value: `${metrics.avgPercentageChange}%` },
-          { title: 'Volatility', value: `${metrics.volatility}%` },
-          { title: 'Cumulative Return', value: `${metrics.cumulativeReturn}%` },
-          { title: 'Concentration Price', value: this.formatCurrency(metrics.concentrationPrice, currencyCode) },
-          { title: 'Maximum Drawdown', value: `${metrics.maxDrawdown}%` }
-      ];
+    const metricsData = [{
+      title: 'Trend',
+      value: metrics.trend,
+      arrow: metrics.trend === 'Bullish' ? '↗' : '↘'
+    }, {
+      title: 'Avg Percentage Change',
+      value: `${metrics.avgPercentageChange}%`
+    }, {
+      title: 'Volatility',
+      value: `${metrics.volatility}%`
+    }, {
+      title: 'Cumulative Return',
+      value: `${metrics.cumulativeReturn}%`
+    }, {
+      title: 'Concentration Price',
+      value: this.formatCurrency(metrics.concentrationPrice, currencyCode)
+    }, {
+      title: 'Maximum Drawdown',
+      value: `${metrics.maxDrawdown}%`
+    }];
 
-      metricsData.forEach(metric => {
-          const isNegative = parseFloat(metric.value) < 0 || metric.trend === 'Bearish';
-          const colorClass = isNegative ? 'negative' : 'positive';
+    metricsData.forEach(metric => {
+      const isNegative = parseFloat(metric.value) < 0 || metric.trend === 'Bearish';
+      const colorClass = isNegative ? 'negative' : 'positive';
 
-          const card = document.createElement('div');
-          card.className = 'metric-card-forecast';
-          card.innerHTML = `
+      const card = document.createElement('div');
+      card.className = 'metric-card-forecast';
+      card.innerHTML = `
               <div class="metric-card-forecast__title">${metric.title}</div>
               <div class="metric-card-forecast__value ${colorClass}">
                   ${metric.value}
                   ${metric.arrow ? `<span class="arrow">${metric.arrow}</span>` : ''}
               </div>
           `;
-          grid.appendChild(card);
-      });
+      grid.appendChild(card);
+    });
   }
-  
+
   /* ------------------------ EXPORT ------------------------------------- */
   exportCSV() {
-    if (this.trades.length===0) { this.showToast('No trades to export','warning'); return; }
+    if (this.trades.length === 0) {
+      this.showToast('No trades to export', 'warning');
+      return;
+    }
     const header = Object.keys(this.trades[0]).join(',');
     const rows = this.trades.map(t => Object.values(t).map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
     const csv = [header, ...rows].join('\n');
-    const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    const blob = new Blob([csv], {
+      type: 'text/csv;charset=utf-8;'
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'trading_journal_data.csv'; a.click();
+    a.href = url;
+    a.download = 'trading_journal_data.csv';
+    a.click();
     URL.revokeObjectURL(url);
   }
 }
 
 // Initialize the app
 window.app = new TradingJournalApp();
-
-"
 
