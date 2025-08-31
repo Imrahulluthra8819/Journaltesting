@@ -19,17 +19,17 @@ class TradingJournalApp {
 
     // --- APP STATE ---
     this.currentUser = null;
-    this.subscription = null; // <-- NEW: To store subscription status
+    this.subscription = null; 
     this.allTrades = [];
     this.allConfidence = [];
     this.allNotes = [];
-    this.allRules = []; // New state for Rulebook
+    this.allRules = []; 
     this.currentEditingNoteId = null;
     this.charts = {};
-    this.forecastChart = null; // New property for forecast chart
+    this.forecastChart = null; 
     this.mainListenersAttached = false;
     this.currentCalendarDate = new Date();
-    this.currencySymbol = '₹'; // Default to INR
+    this.currencySymbol = '₹'; 
     this.tickerWidgetLoaded = false;
     this.chartsWidgetLoaded = false;
 
@@ -42,11 +42,40 @@ class TradingJournalApp {
   }
 
   bootstrap() {
+    // --- MODIFICATION: Handle Magic Link Sign-in on page load ---
+    this.handleMagicLinkSignIn();
     this.setupAuthListeners();
     this.handleAuthStateChange();
   }
 
   /* ------------------------------- AUTH & SUBSCRIPTION ---------------------------------- */
+  
+  async handleMagicLinkSignIn() {
+      if (this.auth.isSignInWithEmailLink(window.location.href)) {
+          let email = window.localStorage.getItem('emailForSignIn');
+          if (!email) {
+              // Ask user for their email if not found in local storage
+              email = window.prompt('Please provide your email for confirmation');
+          }
+          if (email) {
+              try {
+                  await this.auth.signInWithEmailLink(email, window.location.href);
+                  window.localStorage.removeItem('emailForSignIn');
+                  // Clean up the URL to remove the sign-in link parameters
+                  if (window.history && window.history.replaceState) {
+                      window.history.replaceState({}, document.title, window.location.pathname);
+                  }
+                  this.showToast('Successfully signed in!', 'success');
+              } catch (error) {
+                  console.error("Magic link sign-in error", error);
+                  this.showAuthError('login-email-error', `Error signing in: ${error.message}`);
+              }
+          } else {
+             this.showAuthError('login-email-error', 'Email is required to complete sign-in.');
+          }
+      }
+  }
+
 
   async checkSubscriptionStatus() {
       if (!this.currentUser) return false;
@@ -96,7 +125,7 @@ class TradingJournalApp {
         console.log('[AUTH] User is signed in:', user.uid);
         this.currentUser = user;
 
-        const hasActiveSubscription = await this.checkSubscriptionStatus(); // <-- NEW: Check subscription
+        const hasActiveSubscription = await this.checkSubscriptionStatus();
 
         if (hasActiveSubscription) {
             await this.loadUserData();
@@ -116,7 +145,7 @@ class TradingJournalApp {
         this.allRules = [];
         Object.values(this.charts).forEach(chart => chart?.destroy());
         this.charts = {};
-        if (this.forecastChart) this.forecastChart.destroy(); // Clean up forecast chart on logout
+        if (this.forecastChart) this.forecastChart.destroy();
         this.showAuthScreen();
         document.getElementById('aiChatWidget')?.classList.add('hidden');
         document.getElementById('subscriptionExpiredScreen')?.classList.add('hidden');
@@ -124,70 +153,72 @@ class TradingJournalApp {
     });
   }
 
+  // --- MODIFICATION: Updated Auth Listeners for Magic Link ---
   setupAuthListeners() {
-    document.querySelectorAll('.auth-tab').forEach(tab => {
-      tab.addEventListener('click', () => this.switchAuthTab(tab.dataset.tab));
-    });
-
     const loginForm = document.getElementById('loginFormElement');
-    loginForm.addEventListener('submit', async (e) => {
+    loginForm.addEventListener('submit', (e) => {
       e.preventDefault();
-      this.clearAuthErrors();
-      const submitButton = loginForm.querySelector('button[type="submit"]');
-      const originalButtonText = submitButton.textContent;
-      try {
-        submitButton.disabled = true;
-        submitButton.textContent = 'Logging in...';
-        const email = loginForm.email.value;
-        const password = loginForm.password.value;
-        await this.auth.signInWithEmailAndPassword(email, password);
-      } catch (error) {
-        this.showAuthError('login-password-error', error.message);
-      } finally {
-        submitButton.disabled = false;
-        submitButton.textContent = originalButtonText;
-      }
+      this.sendMagicLink();
     });
 
-    const signupForm = document.getElementById('signupFormElement');
-    signupForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      this.clearAuthErrors();
-      const submitButton = signupForm.querySelector('button[type="submit"]');
-      const originalButtonText = submitButton.textContent;
-      try {
-        submitButton.disabled = true;
-        submitButton.textContent = 'Signing up...';
-        const email = signupForm.email.value;
-        const password = signupForm.password.value;
-        const confirm = signupForm.confirmPassword.value;
-        if (password !== confirm) {
-          this.showAuthError('signup-confirmPassword-error', 'Passwords do not match');
-          return;
-        }
-        await this.auth.createUserWithEmailAndPassword(email, password);
-        this.showToast('Signup successful! Please get a subscription to start.', 'success');
-        signupForm.reset();
-        this.switchAuthTab('login');
-      } catch (error) {
-        this.showAuthError('signup-email-error', error.message);
-      } finally {
-        submitButton.disabled = false;
-        submitButton.textContent = originalButtonText;
-      }
-    });
+    const resendBtn = document.getElementById('resendMagicLinkBtn');
+    resendBtn.addEventListener('click', () => this.sendMagicLink());
 
     const googleSignInBtn = document.getElementById('googleSignInBtn');
     if (googleSignInBtn) {
       googleSignInBtn.addEventListener('click', () => this.signInWithGoogle());
     }
 
-    // <-- NEW: Listener for the logout button on the expired screen
     const expiredLogoutBtn = document.getElementById('expiredLogoutBtn');
     if (expiredLogoutBtn) {
         expiredLogoutBtn.addEventListener('click', () => this.logout());
     }
   }
+  
+  // --- NEW: Method to send magic link ---
+  async sendMagicLink() {
+      this.clearAuthErrors();
+      const loginForm = document.getElementById('loginFormElement');
+      const submitButton = loginForm.querySelector('button[type="submit"]');
+      const originalButtonText = submitButton.textContent;
+      const email = loginForm.email.value.trim();
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          this.showAuthError('login-email-error', 'Please enter a valid email address.');
+          return;
+      }
+
+      const resendBtn = document.getElementById('resendMagicLinkBtn');
+      submitButton.disabled = true;
+      submitButton.textContent = 'Sending...';
+      resendBtn.disabled = true;
+
+      try {
+          const actionCodeSettings = {
+              url: window.location.href, // Redirect back to the same page after login
+              handleCodeInApp: true,
+          };
+
+          await this.auth.sendSignInLinkToEmail(email, actionCodeSettings);
+          window.localStorage.setItem('emailForSignIn', email); // Store email for sign-in completion
+
+          // Show confirmation view
+          document.getElementById('loginForm').classList.remove('active');
+          const sentView = document.getElementById('magicLinkSent');
+          document.getElementById('sentToEmail').textContent = email;
+          sentView.classList.add('active');
+          
+          this.showToast('Login link sent to your email!', 'success');
+
+      } catch (error) {
+          this.showAuthError('login-email-error', error.message);
+      } finally {
+          submitButton.disabled = false;
+          submitButton.textContent = originalButtonText;
+          resendBtn.disabled = false;
+      }
+  }
+
 
   async signInWithGoogle() {
     const provider = new firebase.auth.GoogleAuthProvider();
@@ -197,7 +228,7 @@ class TradingJournalApp {
       // Auth state change will handle the rest
     } catch (error) {
       console.error('[AUTH] Google Sign-In Error:', error);
-      this.showAuthError('login-password-error', `Google Sign-In Failed: ${error.message}`);
+      this.showAuthError('login-email-error', `Google Sign-In Failed: ${error.message}`);
     }
   }
 
@@ -210,24 +241,16 @@ class TradingJournalApp {
     }
   }
 
-  switchAuthTab(tab) {
-    document.querySelectorAll('.auth-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-    document.querySelectorAll('.auth-form').forEach(f => f.classList.toggle('active', f.id === tab + 'Form'));
-    this.clearAuthErrors();
-  }
-
   showAuthError(id, msg) {
     const el = document.getElementById(id);
     if (el) {
       el.textContent = msg;
-      el.classList.add('active');
     }
   }
 
   clearAuthErrors() {
     document.querySelectorAll('.form-error').forEach(e => {
       e.textContent = '';
-      e.classList.remove('active');
     });
   }
 
@@ -240,7 +263,7 @@ class TradingJournalApp {
     const tradesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('trades').orderBy('entryDate', 'desc').get();
     const confidenceQuery = this.db.collection('users').doc(this.currentUser.uid).collection('confidence').orderBy('date', 'desc').get();
     const notesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('notes').orderBy('date', 'desc').get();
-    const rulesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('rules').orderBy('createdAt', 'desc').get(); // New query for rules
+    const rulesQuery = this.db.collection('users').doc(this.currentUser.uid).collection('rules').orderBy('createdAt', 'desc').get();
     try {
       const [tradesSnapshot, confidenceSnapshot, notesSnapshot, rulesSnapshot] = await Promise.all([tradesQuery, confidenceQuery, notesQuery, rulesQuery]);
       this.allTrades = tradesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -252,7 +275,8 @@ class TradingJournalApp {
       this.allRules = rulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       console.log(`[DATA] Loaded ${this.allRules.length} rules.`);
 
-    } catch (error) {
+    } catch (error)
+        {
       console.error("[DATA] Error loading user data:", error);
       this.showToast(`Error loading data: ${error.message}`, 'error');
       this.allTrades = [];
@@ -267,6 +291,9 @@ class TradingJournalApp {
     document.getElementById('authScreen').style.display = 'flex';
     document.getElementById('mainApp').classList.add('hidden');
     document.getElementById('subscriptionExpiredScreen')?.classList.add('hidden');
+    // Reset auth forms to initial state
+    document.getElementById('loginForm').classList.add('active');
+    document.getElementById('magicLinkSent').classList.remove('active');
   }
 
   showMainApp() {
@@ -1898,4 +1925,3 @@ class TradingJournalApp {
 
 // Initialize the app
 window.app = new TradingJournalApp();
-
