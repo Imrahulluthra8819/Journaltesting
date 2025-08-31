@@ -1,12 +1,13 @@
 // Netlify Function: create-subscription.js
-// This function finds an existing user or creates a new one for a free trial,
-// then creates a subscription document for them in Firestore.
+// This function finds an existing user or creates a new one,
+// creates a subscription document in Firestore, and sends a welcome email.
 
 const admin = require('firebase-admin');
+// NOTE: In a real-world scenario, you would use a transactional email service.
+// const nodemailer = require('nodemailer'); 
 
 let db, auth;
 
-// This block initializes the connection to your Firebase database.
 try {
     if (!admin.apps.length) {
         admin.initializeApp({
@@ -20,15 +21,57 @@ try {
     db = admin.firestore();
     auth = admin.auth();
 } catch (e) {
-    console.error("CRITICAL ERROR: Firebase admin initialization FAILED. Check your environment variables.", e);
+    console.error("CRITICAL ERROR: Firebase admin initialization FAILED.", e);
 }
 
-exports.handler = async (event) => {
-  // *** DIAGNOSTIC LOG V4: This message confirms the latest version is deployed. ***
-  console.log("--- RUNNING DIAGNOSTIC VERSION 4 ---");
+// --- CONCEPTUAL EMAIL SENDING FUNCTION ---
+// In a real application, you would configure this with a service like SendGrid, Mailgun, or AWS SES.
+// This function simulates sending a welcome email.
+async function sendWelcomeEmail(userData) {
+    const { email, name, planId, durationDays } = userData;
+    const journalUrl = 'https://journaltesting.netlify.app'; // Your live journal URL
 
+    console.log(`--- SIMULATING WELCOME EMAIL ---`);
+    console.log(`TO: ${email}`);
+    console.log(`SUBJECT: Welcome to TraderLog!`);
+    console.log(`BODY:`);
+    console.log(`Hi ${name || 'Trader'},`);
+    console.log(`\nWelcome to TraderLog! Your subscription is now active.`);
+    console.log(`\nPLAN DETAILS:`);
+    console.log(`- Plan: ${planId}`);
+    console.log(`- Duration: ${durationDays} days`);
+    console.log(`\nYou can log in to your journal here: ${journalUrl}`);
+    console.log(`\nHappy trading!`);
+    console.log(`---------------------------------`);
+
+    // Example using Nodemailer (requires setup and environment variables for credentials)
+    /*
+    let transporter = nodemailer.createTransport({
+        host: "smtp.example.com",
+        port: 587,
+        secure: false, // true for 465, false for other ports
+        auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+        },
+    });
+
+    await transporter.sendMail({
+        from: '"TraderLog" <no-reply@traderlog.com>',
+        to: email,
+        subject: "Welcome to TraderLog!",
+        html: `<b>Hi ${name || 'Trader'},</b><p>Welcome to TraderLog! Your subscription for the ${planId} plan is now active for ${durationDays} days.</p><p>You can access your journal by clicking here: <a href="${journalUrl}">Login to Journal</a></p>`,
+    });
+    */
+   
+    return Promise.resolve(); // Simulate successful email sending
+}
+
+
+exports.handler = async (event) => {
+  console.log("--- RUNNING SUBSCRIPTION FUNCTION (v5 with Welcome Email) ---");
   const headers = {
-    'Access-Control-Allow-Origin': '*', // In production, restrict this to your app's domain
+    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS'
   };
@@ -38,12 +81,7 @@ exports.handler = async (event) => {
   }
 
   if (!db || !auth) {
-      console.error("[LOG] CRITICAL: Firebase Admin SDK not initialized. Function cannot proceed.");
-      return {
-          statusCode: 500,
-          headers,
-          body: JSON.stringify({ error: "Server configuration error. Please contact support." })
-      };
+      return { statusCode: 500, headers, body: JSON.stringify({ error: "Server configuration error." }) };
   }
   
   if (event.httpMethod !== 'POST') {
@@ -53,14 +91,11 @@ exports.handler = async (event) => {
   let body;
   try {
     body = JSON.parse(event.body);
-    // *** DIAGNOSTIC LOG V4: Log the entire incoming request body to see what is being sent. ***
-    console.log("Incoming request body:", JSON.stringify(body, null, 2));
   } catch (parseError) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid request format.' }) };
   }
 
   try {
-    // *** FIX: Corrected variable name to affiliateId to match frontend payload ***
     const { planId, email, name, phone, affiliateId } = body;
 
     if (!planId || !email) {
@@ -73,15 +108,8 @@ exports.handler = async (event) => {
         userRecord = await auth.getUserByEmail(email);
     } catch (error) {
         if (error.code === 'auth/user-not-found') {
-            if (planId === 'trial') {
-                userRecord = await auth.createUser({ email, displayName: name || '' });
-                isNewUser = true;
-            } else {
-                return {
-                    statusCode: 404, headers,
-                    body: JSON.stringify({ error: `Account for ${email} not found. Please sign up in the Trading Journal before buying a plan.` })
-                };
-            }
+            userRecord = await auth.createUser({ email, displayName: name || '' });
+            isNewUser = true;
         } else {
             throw error;
         }
@@ -94,8 +122,7 @@ exports.handler = async (event) => {
         const doc = await subscriptionRef.get();
         if (doc.exists) {
             return {
-                statusCode: 403,
-                headers,
+                statusCode: 403, headers,
                 body: JSON.stringify({ error: 'A free trial has already been used for this account.' }),
             };
         }
@@ -126,17 +153,19 @@ exports.handler = async (event) => {
 
     await subscriptionRef.set(subscriptionData, { merge: true });
 
+    // --- SEND WELCOME EMAIL ---
+    await sendWelcomeEmail({ email, name, planId, durationDays });
+
     return {
       statusCode: 200, headers,
       body: JSON.stringify({ success: true, message: 'Subscription activated successfully.' }),
     };
 
   } catch (error) {
-    console.error('[LOG] CRITICAL: Unhandled exception in main handler.', error);
+    console.error('[LOG] CRITICAL: Unhandled exception.', error);
     return {
       statusCode: 500, headers,
       body: JSON.stringify({ error: 'An internal server error occurred.' }),
     };
   }
 };
-
