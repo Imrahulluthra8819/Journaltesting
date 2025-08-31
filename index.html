@@ -23,54 +23,40 @@
                 </h1>
                 <p>Professional Trading Tracker & Analytics</p>
             </div>
-            <div class="auth-tabs">
-                <button class="auth-tab active" data-tab="login">Login</button>
-                <button class="auth-tab" data-tab="signup">Sign Up</button>
-            </div>
+            
+            <!-- MODIFICATION: Simplified login form, removed tabs and signup -->
             <div id="loginForm" class="auth-form active">
-                <h2>Welcome Back</h2>
+                <h2>Login to Your Journal</h2>
+                <p style="text-align: center; color: var(--color-text-secondary); margin-bottom: 24px; font-size: 14px;">
+                   Enter the email you used to subscribe. We'll send you a magic link to log in instantly.
+                </p>
                 <form id="loginFormElement" novalidate>
                     <div class="form-group">
                         <label class="form-label">Email</label>
-                        <input type="email" name="email" class="form-control" required placeholder="Enter your email">
+                        <input type="email" name="email" class="form-control" required placeholder="Enter your subscription email">
                         <div class="form-error" id="login-email-error"></div>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">Password</label>
-                        <input type="password" name="password" class="form-control" required placeholder="Enter password">
-                        <div class="form-error" id="login-password-error"></div>
-                    </div>
-                    <button type="submit" class="btn btn--primary btn--full-width">Login</button>
-                </form>
-            </div>
-            <div id="signupForm" class="auth-form">
-                <h2>Create Account</h2>
-                <form id="signupFormElement" novalidate>
-                    <div class="form-group">
-                        <label class="form-label">Email</label>
-                        <input type="email" name="email" class="form-control" required placeholder="Enter your email">
-                        <div class="form-error" id="signup-email-error"></div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Password</label>
-                        <input type="password" name="password" class="form-control" required placeholder="Create a password" minlength="8">
-                        <div class="form-error" id="signup-password-error"></div>
-                        <small class="form-help">Minimum 8 characters</small>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Confirm Password</label>
-                        <input type="password" name="confirmPassword" class="form-control" required placeholder="Confirm your password">
-                        <div class="form-error"id="signup-confirmPassword-error"></div>
-                    </div>
-                    <button type="submit" class="btn btn--primary btn--full-width">Create Account</button>
+                    <button type="submit" class="btn btn--primary btn--full-width">Send Magic Link</button>
                 </form>
             </div>
 
+            <!-- MODIFICATION: New view for after magic link is sent -->
+            <div id="magicLinkSent" class="auth-form" style="text-align: center;">
+                <h2>Check Your Email</h2>
+                <p>We've sent a magic login link to <strong id="sentToEmail" style="color: var(--color-primary);"></strong>. Click the link to sign in.</p>
+                <p style="color: var(--color-text-secondary); font-size: 12px; margin-top: 16px;">Didn't receive it? Check your spam folder.</p>
+                <button id="resendMagicLinkBtn" class="btn btn--secondary btn--full-width" style="margin-top: 12px;">Resend Magic Link</button>
+            </div>
+
+
             <div class="auth-divider"><span>OR</span></div>
-            <button id="googleSignInBtn" class="google-signin-btn">
+            <button id="googleSignInBtn">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo">
                 Sign in with Google
             </button>
+            <p style="text-align: center; color: var(--color-text-secondary); margin-top: 16px; font-size: 12px;">
+                Make sure to use the same email you provided while subscribing.
+            </p>
             </div>
     </div>
     
@@ -600,4 +586,3 @@
     <script src="app.js"></script>
 </body>
 </html>
-
