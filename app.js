@@ -73,33 +73,19 @@ class TradingJournalApp {
       }
   }
 
-  // --- MODIFIED with DEBUGGING LOGS ---
   async checkSubscriptionStatus() {
       if (!this.currentUser) return false;
-
-      // --- DEBUGGING START ---
-      console.log(`[DEBUG] Checking access for user: ${this.currentUser.email} (UID: ${this.currentUser.uid})`);
-      // --- DEBUGGING END ---
 
       const adminRef = this.db.collection('admins').doc(this.currentUser.uid);
       try {
           const adminDoc = await adminRef.get();
-          // --- DEBUGGING START ---
           if (adminDoc.exists) {
-              console.log("[DEBUG] Admin document found in Firestore. Granting access.");
-          } else {
-              console.log("[DEBUG] Admin document NOT found in Firestore for this UID. Proceeding to subscription check.");
-          }
-          // --- DEBUGGING END ---
-
-          if (adminDoc.exists) {
+              console.log("[AUTH] Admin user found in Firestore. Granting access.");
               this.subscription = { active: true, planId: 'admin', reason: 'admin_override' };
               return true;
           }
       } catch (error) {
-          // --- DEBUGGING START ---
-          console.error("[DEBUG] CRITICAL: Error reading from 'admins' collection. This is likely a SECURITY RULE issue.", error);
-          // --- DEBUGGING END ---
+          console.error("[AUTH] Error reading from 'admins' collection.", error);
       }
 
       const subRef = this.db.collection('subscriptions').doc(this.currentUser.uid);
@@ -152,7 +138,6 @@ class TradingJournalApp {
         if (hasActiveSubscription) {
             await this.loadUserData();
             this.showMainApp();
-            document.getElementById('aiChatWidget')?.classList.remove('hidden');
         } else {
             this.showSubscriptionExpiredScreen();
         }
@@ -317,6 +302,8 @@ class TradingJournalApp {
     document.getElementById('authScreen').style.display = 'none';
     document.getElementById('mainApp').classList.remove('hidden');
     document.getElementById('subscriptionExpiredScreen')?.classList.add('hidden');
+    document.getElementById('aiChatWidget')?.classList.remove('hidden'); // RESTORED: Show AI widget here
+
     if (!this.mainListenersAttached) {
       this.attachMainListeners();
       this.mainListenersAttached = true;
@@ -523,7 +510,12 @@ class TradingJournalApp {
     } else {
       list.innerHTML = this.trades.slice(0, 4).map(t => `
         <div class="trade-item" onclick="app.showTradeDetails('${t.id}')">
-            <div class.netPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(t.netPL)}</div>
+            <div class="trade-info">
+            <span class="trade-symbol">${t.symbol}</span>
+            <span class="trade-direction ${t.direction.toLowerCase()}">${t.direction}</span>
+            <span class="trade-date">${this.formatDate(t.entryDate)}</span>
+            </div>
+            <div class="trade-pl ${t.netPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(t.netPL)}</div>
         </div>`).join('');
     }
     this.drawDashboardPLChart();
@@ -1922,4 +1914,6 @@ class TradingJournalApp {
 
 // Initialize the app
 window.app = new TradingJournalApp();
+
+"
 
