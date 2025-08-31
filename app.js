@@ -42,7 +42,6 @@ class TradingJournalApp {
   }
 
   bootstrap() {
-    // --- MODIFICATION: Handle Magic Link Sign-in on page load ---
     this.handleMagicLinkSignIn();
     this.setupAuthListeners();
     this.handleAuthStateChange();
@@ -54,14 +53,12 @@ class TradingJournalApp {
       if (this.auth.isSignInWithEmailLink(window.location.href)) {
           let email = window.localStorage.getItem('emailForSignIn');
           if (!email) {
-              // Ask user for their email if not found in local storage
               email = window.prompt('Please provide your email for confirmation');
           }
           if (email) {
               try {
                   await this.auth.signInWithEmailLink(email, window.location.href);
                   window.localStorage.removeItem('emailForSignIn');
-                  // Clean up the URL to remove the sign-in link parameters
                   if (window.history && window.history.replaceState) {
                       window.history.replaceState({}, document.title, window.location.pathname);
                   }
@@ -76,9 +73,34 @@ class TradingJournalApp {
       }
   }
 
-
+  // --- MODIFIED with DEBUGGING LOGS ---
   async checkSubscriptionStatus() {
       if (!this.currentUser) return false;
+
+      // --- DEBUGGING START ---
+      console.log(`[DEBUG] Checking access for user: ${this.currentUser.email} (UID: ${this.currentUser.uid})`);
+      // --- DEBUGGING END ---
+
+      const adminRef = this.db.collection('admins').doc(this.currentUser.uid);
+      try {
+          const adminDoc = await adminRef.get();
+          // --- DEBUGGING START ---
+          if (adminDoc.exists) {
+              console.log("[DEBUG] Admin document found in Firestore. Granting access.");
+          } else {
+              console.log("[DEBUG] Admin document NOT found in Firestore for this UID. Proceeding to subscription check.");
+          }
+          // --- DEBUGGING END ---
+
+          if (adminDoc.exists) {
+              this.subscription = { active: true, planId: 'admin', reason: 'admin_override' };
+              return true;
+          }
+      } catch (error) {
+          // --- DEBUGGING START ---
+          console.error("[DEBUG] CRITICAL: Error reading from 'admins' collection. This is likely a SECURITY RULE issue.", error);
+          // --- DEBUGGING END ---
+      }
 
       const subRef = this.db.collection('subscriptions').doc(this.currentUser.uid);
       const doc = await subRef.get();
@@ -153,7 +175,6 @@ class TradingJournalApp {
     });
   }
 
-  // --- MODIFICATION: Updated Auth Listeners for Magic Link ---
   setupAuthListeners() {
     const loginForm = document.getElementById('loginFormElement');
     loginForm.addEventListener('submit', (e) => {
@@ -175,7 +196,6 @@ class TradingJournalApp {
     }
   }
   
-  // --- NEW: Method to send magic link ---
   async sendMagicLink() {
       this.clearAuthErrors();
       const loginForm = document.getElementById('loginFormElement');
@@ -195,14 +215,13 @@ class TradingJournalApp {
 
       try {
           const actionCodeSettings = {
-              url: window.location.href, // Redirect back to the same page after login
+              url: window.location.href,
               handleCodeInApp: true,
           };
 
           await this.auth.sendSignInLinkToEmail(email, actionCodeSettings);
-          window.localStorage.setItem('emailForSignIn', email); // Store email for sign-in completion
+          window.localStorage.setItem('emailForSignIn', email);
 
-          // Show confirmation view
           document.getElementById('loginForm').classList.remove('active');
           const sentView = document.getElementById('magicLinkSent');
           document.getElementById('sentToEmail').textContent = email;
@@ -225,7 +244,6 @@ class TradingJournalApp {
     try {
       this.clearAuthErrors();
       await this.auth.signInWithPopup(provider);
-      // Auth state change will handle the rest
     } catch (error) {
       console.error('[AUTH] Google Sign-In Error:', error);
       this.showAuthError('login-email-error', `Google Sign-In Failed: ${error.message}`);
@@ -291,7 +309,6 @@ class TradingJournalApp {
     document.getElementById('authScreen').style.display = 'flex';
     document.getElementById('mainApp').classList.add('hidden');
     document.getElementById('subscriptionExpiredScreen')?.classList.add('hidden');
-    // Reset auth forms to initial state
     document.getElementById('loginForm').classList.add('active');
     document.getElementById('magicLinkSent').classList.remove('active');
   }
@@ -309,7 +326,6 @@ class TradingJournalApp {
   }
 
   attachMainListeners() {
-    // --- MAIN APP LISTENERS ---
     document.querySelectorAll('.nav-link, .view-all-link').forEach(btn => {
       btn.addEventListener('click', () => this.showSection(btn.dataset.section));
     });
@@ -322,7 +338,7 @@ class TradingJournalApp {
     document.getElementById('quickAddTrade').addEventListener('click', () => this.showSection('add-trade'));
     document.getElementById('saveConfidenceBtn').addEventListener('click', () => this.saveDailyConfidence());
     document.getElementById('saveNoteBtn').addEventListener('click', () => this.saveNote());
-    document.getElementById('saveNoteChangesBtn').addEventListener('click', () => this.saveNoteChanges()); // Listener for modal save
+    document.getElementById('saveNoteChangesBtn').addEventListener('click', () => this.saveNoteChanges());
     this.setupAddTradeForm();
     document.getElementById('exportData').addEventListener('click', () => this.exportCSV());
     document.getElementById('prevMonth').addEventListener('click', () => this.changeCalendarMonth(-1));
@@ -334,7 +350,6 @@ class TradingJournalApp {
       if (activeSection) this.showSection(activeSection.id);
     });
     
-    // --- RULEBOOK LISTENERS ---
     document.getElementById('showRulebookBtn').addEventListener('click', () => this.showRulebookModal());
     const rulebookForm = document.getElementById('rulebookForm');
     rulebookForm.addEventListener('submit', (e) => {
@@ -343,8 +358,6 @@ class TradingJournalApp {
     });
     document.getElementById('cancelEditRuleBtn').addEventListener('click', () => this.resetRulebookForm());
 
-
-    // --- HAMBURGER MENU ---
     const navToggle = document.getElementById('navToggle');
     const navCollapse = document.getElementById('navCollapse');
     if (navToggle && navCollapse) {
@@ -353,7 +366,6 @@ class TradingJournalApp {
             navCollapse.classList.toggle('active');
         });
 
-        // Close menu when a link is clicked
         navCollapse.querySelectorAll('.nav-link').forEach(link => {
             link.addEventListener('click', () => {
                 navToggle.classList.remove('active');
@@ -362,7 +374,6 @@ class TradingJournalApp {
         });
     }
 
-    // --- AI CHAT LISTENERS ---
     const chatBubble = document.getElementById('aiChatBubble');
     const chatWindow = document.getElementById('aiChatWindow');
     const closeChatBtn = document.getElementById('closeChatBtn');
@@ -394,7 +405,6 @@ class TradingJournalApp {
       });
     }
     
-    // --- NEW FORECAST LISTENER ---
     document.getElementById('getForecastBtn').addEventListener('click', () => this.getForecast());
   }
 
@@ -416,7 +426,6 @@ class TradingJournalApp {
           document.getElementById('themeToggle').textContent = '🌙';
       }
 
-      // Force reload of widgets if they are visible
       if (document.getElementById('dashboard').classList.contains('active')) {
           this.tickerWidgetLoaded = false;
           this.loadTickerWidget();
@@ -453,7 +462,6 @@ class TradingJournalApp {
     if(currencyCode) {
         if (currencyCode === 'INR') symbol = '₹';
         if (currencyCode === 'USD') symbol = '$';
-        // Add other currency codes as needed
         locale = currencyCode === 'INR' ? 'en-IN' : 'en-US';
     }
 
@@ -515,12 +523,7 @@ class TradingJournalApp {
     } else {
       list.innerHTML = this.trades.slice(0, 4).map(t => `
         <div class="trade-item" onclick="app.showTradeDetails('${t.id}')">
-            <div class="trade-info">
-            <span class="trade-symbol">${t.symbol}</span>
-            <span class="trade-direction ${t.direction.toLowerCase()}">${t.direction}</span>
-            <span class="trade-date">${this.formatDate(t.entryDate)}</span>
-            </div>
-            <div class="trade-pl ${t.netPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(t.netPL)}</div>
+            <div class.netPL >= 0 ? 'positive' : 'negative'}">${this.formatCurrency(t.netPL)}</div>
         </div>`).join('');
     }
     this.drawDashboardPLChart();
@@ -555,7 +558,7 @@ class TradingJournalApp {
 
       const container = document.getElementById('newsTickerContainer');
       if (container) {
-          container.innerHTML = ''; // Clear previous widget
+          container.innerHTML = '';
           container.appendChild(script);
           this.tickerWidgetLoaded = true;
       }
@@ -598,17 +601,14 @@ class TradingJournalApp {
 
     try {
         if (existingNote) {
-            // Update existing note for today
             await this.db.collection('users').doc(this.currentUser.uid).collection('notes').doc(existingNote.id).update({
                 content: content,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
-            // Update local state
             const noteIndex = this.allNotes.findIndex(n => n.id === existingNote.id);
             this.allNotes[noteIndex].content = content;
             this.showToast('Note for today updated!', 'success');
         } else {
-            // Add new note for today
             const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('notes').add({
                 date: today,
                 content: content,
@@ -749,12 +749,12 @@ class TradingJournalApp {
       };
 
       try {
-          if (ruleId) { // Editing existing rule
+          if (ruleId) {
               await this.db.collection('users').doc(this.currentUser.uid).collection('rules').doc(ruleId).update(ruleData);
               const index = this.allRules.findIndex(r => r.id === ruleId);
               this.allRules[index] = { ...this.allRules[index], ...ruleData };
               this.showToast('Rule updated successfully!', 'success');
-          } else { // Adding new rule
+          } else { 
               ruleData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
               const docRef = await this.db.collection('users').doc(this.currentUser.uid).collection('rules').add(ruleData);
               this.allRules.unshift({ id: docRef.id, ...ruleData });
@@ -782,7 +782,6 @@ class TradingJournalApp {
   }
 
   async deleteRule(ruleId) {
-      // In a real app, a confirmation modal is better. For this implementation, we delete directly.
       try {
           await this.db.collection('users').doc(this.currentUser.uid).collection('rules').doc(ruleId).delete();
           this.allRules = this.allRules.filter(r => r.id !== ruleId);
@@ -809,7 +808,7 @@ class TradingJournalApp {
     const exitDateEl = document.querySelector('input[name="exitDate"]');
     if (entryDateEl) entryDateEl.value = now.toISOString().slice(0, 16);
     if (exitDateEl) exitDateEl.value = new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString().slice(0, 16);
-    this.renderRulebookChecklist(); // Render rules in the form
+    this.renderRulebookChecklist();
   }
   
   renderRulebookChecklist() {
@@ -950,7 +949,7 @@ class TradingJournalApp {
       sectorPerformance: fd.get('sectorPerformance') || '',
       economicEvents: this.getCheckboxValues(form, 'economicEvents'),
       personalDistractions: this.getCheckboxValues(form, 'personalDistractions'),
-      followedRules: this.getCheckboxValues(form, 'followedRules'), // Save followed rules
+      followedRules: this.getCheckboxValues(form, 'followedRules'),
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     trade.grossPL = trade.direction === 'Long' ? (trade.exitPrice - trade.entryPrice) * trade.quantity : (trade.entryPrice - trade.exitPrice) * trade.quantity;
@@ -1031,7 +1030,6 @@ class TradingJournalApp {
     if (!t) return;
     const rrText = t.riskRewardRatio ? t.riskRewardRatio.toFixed(2) : '0.00';
     
-    // Generate HTML for followed rules
     let followedRulesHtml = '';
     if (t.followedRules && t.followedRules.length > 0) {
         followedRulesHtml = `
@@ -1331,7 +1329,7 @@ class TradingJournalApp {
     document.getElementById('monthlyReport').innerHTML = this.generateMonthlyReport();
     document.getElementById('strategyReport').innerHTML = this.generateStrategyReport();
     document.getElementById('emotionalReport').innerHTML = this.generateEmotionalReport();
-    document.getElementById('rulebookReport').innerHTML = this.generateRulebookReport(); // New report
+    document.getElementById('rulebookReport').innerHTML = this.generateRulebookReport();
   }
 
   changeCalendarMonth(offset) {
@@ -1880,7 +1878,7 @@ class TradingJournalApp {
 
   renderForecastMetrics(metrics, currencyCode) {
       const grid = document.getElementById('forecastMetricsGrid');
-      grid.innerHTML = ''; // Clear previous metrics
+      grid.innerHTML = '';
 
       const metricsData = [
           { title: 'Trend', value: metrics.trend, arrow: metrics.trend === 'Bullish' ? '↗' : '↘' },
@@ -1907,7 +1905,6 @@ class TradingJournalApp {
           grid.appendChild(card);
       });
   }
-  // --- END: NEW FORECAST METHODS ---
   
   /* ------------------------ EXPORT ------------------------------------- */
   exportCSV() {
@@ -1925,3 +1922,4 @@ class TradingJournalApp {
 
 // Initialize the app
 window.app = new TradingJournalApp();
+
