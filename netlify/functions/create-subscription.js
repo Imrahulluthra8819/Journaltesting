@@ -24,8 +24,8 @@ try {
 }
 
 exports.handler = async (event) => {
-  // *** DIAGNOSTIC LOG: This message is added to confirm the new version is deployed. ***
-  console.log("--- Running create-subscription function v3 (with affiliateId fix) ---");
+  // *** DIAGNOSTIC LOG V4: This message confirms the latest version is deployed. ***
+  console.log("--- RUNNING DIAGNOSTIC VERSION 4 ---");
 
   const headers = {
     'Access-Control-Allow-Origin': '*', // In production, restrict this to your app's domain
@@ -53,6 +53,8 @@ exports.handler = async (event) => {
   let body;
   try {
     body = JSON.parse(event.body);
+    // *** DIAGNOSTIC LOG V4: Log the entire incoming request body to see what is being sent. ***
+    console.log("Incoming request body:", JSON.stringify(body, null, 2));
   } catch (parseError) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid request format.' }) };
   }
