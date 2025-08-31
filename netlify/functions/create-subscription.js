@@ -55,6 +55,7 @@ exports.handler = async (event) => {
   }
 
   try {
+    // *** FIX: Corrected variable name from affiliate_id to affiliateId to match frontend payload ***
     const { planId, email, name, phone, affiliateId } = body;
 
     if (!planId || !email) {
@@ -140,4 +141,3 @@ exports.handler = async (event) => {
     };
   }
 };
-
